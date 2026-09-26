@@ -7,7 +7,8 @@ use pojo::{
 };
 use std::path::Path;
 use serde::{Serialize};
-use tauri::{Manager, State, WindowEvent, AppHandle, Emitter};
+use tauri::{Manager, State, WindowEvent, App, AppHandle, Emitter};
+use tauri_plugin_log::log;
 use util::{
     db_manager, get_app_info, get_scan_dir,
     repo::{assets, assets_object, project, tag, text_origin, text_translate},
@@ -325,6 +326,49 @@ async fn close_all_db(manager: &db_manager::DbManager) -> Result<(), String> {
     Ok(())
 }
 
+// 启动 AssetWorker sidecar（.NET 8 自包含 ASP.NET Core 服务）
+// sidecar() 只传文件名，运行时解析为 <主程序目录>/AssetWorker.exe；
+// classdata.tpk / e_sqlite3.dll 作为 resources 打包到同级目录，与其 AppContext.BaseDirectory 一致。
+// 必须显式传 --urls：launchSettings.json 仅对 dotnet run 生效，直接运行 exe 默认监听 5000。
+fn spawn_asset_worker(app: &mut App) {
+    use tauri_plugin_shell::process::CommandEvent;
+    use tauri_plugin_shell::ShellExt;
+
+    let command = match app.shell().sidecar("AssetWorker") {
+        Ok(cmd) => cmd.args(["--urls", "http://localhost:5089"]),
+        Err(e) => {
+            log::error!("解析 AssetWorker sidecar 失败: {e}");
+            return;
+        }
+    };
+
+    match command.spawn() {
+        Ok((mut rx, child)) => {
+            // Rust 侧 spawn 的进程不在插件的 RunEvent::Exit 清理列表里，
+            // 将 child 移入常驻任务保活；runtime 退出时 kill_on_drop 回收进程。
+            // 同时持续消费输出，防止管道缓冲区写满导致子进程阻塞。
+            tauri::async_runtime::spawn(async move {
+                let _child = child;
+                while let Some(event) = rx.recv().await {
+                    match event {
+                        CommandEvent::Stdout(line) => {
+                            log::debug!("AssetWorker: {}", String::from_utf8_lossy(&line));
+                        }
+                        CommandEvent::Stderr(line) => {
+                            log::error!("AssetWorker: {}", String::from_utf8_lossy(&line));
+                        }
+                        CommandEvent::Terminated(status) => {
+                            log::warn!("AssetWorker 已退出: {:?}", status);
+                        }
+                        _ => {}
+                    }
+                }
+            });
+        }
+        Err(e) => log::error!("启动 AssetWorker 失败: {e}"),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let manager = db_manager::DbManager::new();
@@ -344,6 +388,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(manager)
         .setup(move |app| {
+            spawn_asset_worker(app);
+
             let manager = manager_for_setup.clone();
 
             // 给初始化协程单独一份
