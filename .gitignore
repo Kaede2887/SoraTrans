@@ -2,9 +2,6 @@
 bin/
 obj/
 
-# Tauri sidecar 二进制（体积大，单独分发）
-SoraTrans/src-tauri/binaries/
-
 # Rider / Visual Studio
 .idea/
 .vs/
