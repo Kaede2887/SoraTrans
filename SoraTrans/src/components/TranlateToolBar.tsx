@@ -1,6 +1,6 @@
 import { useAssetObjectStore } from "@/model/AssetObjectInfo"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
-import { DownloadIcon, UploadIcon } from "lucide-react"
+import { DownloadIcon } from "lucide-react"
 import { ReactNode, useState } from "react"
 import { FiFileText, FiTable } from "react-icons/fi"
 import { open } from '@tauri-apps/plugin-dialog';

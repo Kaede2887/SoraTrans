@@ -2,7 +2,7 @@ import { MdMenu, MdTranslate } from "react-icons/md";
 import { SideItem, SideItemType } from "./SideItem";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { LuGamepad2, LuInfo, LuSettings, LuType } from "react-icons/lu";
+import { LuGamepad2 } from "react-icons/lu";
 import { TbTextRecognition } from "react-icons/tb";
 
 export default function SideBar(setCurrentTab:{setCurrentTab:(tabId: number) => void}) {
