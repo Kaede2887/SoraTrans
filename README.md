@@ -133,28 +133,49 @@ SoraTrans 目前处于开发阶段。
 
 ## Building
 
-项目目前主要面向 Windows 开发和运行。
+项目目前主要面向 Windows 平台进行开发和运行。
 
-克隆项目：
+### 1. 克隆项目
 
 ```bash
 git clone https://github.com/Kaede2887/SoraTrans.git
 cd SoraTrans
 ```
 
-安装前端依赖：
+### 2. 构建 AssetWorker
+
+进入 `AssetWorker` 目录：
 
 ```bash
+cd AssetWorker
+dotnet build
+```
+
+### 3. 运行 AssetWorker
+
+```bash
+dotnet run
+```
+
+AssetWorker 启动后会提供 HTTP API，供 SoraTrans 主程序进行资源扫描、文本提取和资源处理。
+
+### 4. 安装前端依赖
+
+打开新的终端，进入 SoraTrans 前端目录：
+
+```bash
+cd SoraTrans
 npm install
 ```
 
-运行开发环境：
+### 5. 运行 SoraTrans
 
 ```bash
 npm run tauri dev
 ```
 
-具体构建方式及 AssetWorker 配置将在项目 API 和目录结构稳定后进一步完善。
+开发环境启动后，SoraTrans 前端将通过 Tauri 与 Rust 后端以及 AssetWorker 进行通信。
+
 
 ## Disclaimer
 
