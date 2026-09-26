@@ -102,35 +102,6 @@ SoraTrans 采用桌面应用与 Unity 资源处理服务分离的架构。
 └─────────────────────────────────────────┘
 ```
 
-## Workflow
-
-SoraTrans 的基本工作流程如下：
-
-```text
-Unity Game
-    │
-    ▼
-Resource Scanning
-    │
-    ▼
-Asset Analysis
-    │
-    ▼
-Text Extraction
-    │
-    ▼
-Translation Import
-    │
-    ▼
-Asset Patching
-    │
-    ▼
-Asset / Bundle Repacking
-    │
-    ▼
-Localized Game
-```
-
 ## Project Status
 
 SoraTrans 目前处于开发阶段。
