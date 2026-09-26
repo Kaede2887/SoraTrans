@@ -30,7 +30,7 @@ export default function GamesView({ id, dbPath }: { id: number | null, dbPath: s
                 const res: VndbRes = await response.json() as VndbRes;
                 await manager.completeProjctInfo(id, dbPath, res);
                 if (!isInit) {
-                    await fetch("http://localhost:5013/api/command/init", {
+                    await fetch("http://localhost:5089/api/command/init", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ Path: info?.root_path, DbPath: dbPath })
@@ -45,7 +45,7 @@ export default function GamesView({ id, dbPath }: { id: number | null, dbPath: s
                 }
             } else {
                 if (!isInit) {
-                    await fetch("http://localhost:5013/api/command/init",{
+                    await fetch("http://localhost:5089/api/command/init",{
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ Path: info?.root_path, DbPath: dbPath })

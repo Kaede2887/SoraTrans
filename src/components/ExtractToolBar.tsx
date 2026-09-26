@@ -22,8 +22,8 @@ export default function ExtractToolBar({ title }: { title: string }) {
         const status = await gm.selectScanStatus();
         if (status?.total == 0) {
             setIsFirstScan(true);
-            runSSE(`http://localhost:5013/api/command/scan/${title}`).then(()=>
-                runSSE(`http://localhost:5013/api/command/extract`)
+            runSSE(`http://localhost:5089/api/command/scan/${title}`).then(()=>
+                runSSE(`http://localhost:5089/api/command/extract`)
             )
         } else {
             if (!status) return;
@@ -32,7 +32,7 @@ export default function ExtractToolBar({ title }: { title: string }) {
             setTotal(status.total ?? 0);
             setScanned(status.scanned ?? 0);
             setTotalResult(status.line ?? 0);
-            runSSE(`http://localhost:5013/api/command/extract`);
+            runSSE(`http://localhost:5089/api/command/extract`);
         }
     }
     const handleStopBtn = () => {

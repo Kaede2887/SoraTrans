@@ -46,7 +46,7 @@
           "url": "https://api.vndb.org/kana/vn"
         },
         {
-          "url": "http://localhost:5013/api/command/*"
+          "url": "http://localhost:5089/api/command/*"
         }
       ],
       "deny": [

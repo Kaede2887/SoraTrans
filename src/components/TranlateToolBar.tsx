@@ -60,7 +60,7 @@ export default function TranslateToolBar() {
         if (!dir) return;
         const formData = new URLSearchParams();
         formData.append('dir', dir);
-        await fetch("http://localhost:5013/api/command/make_patch",{
+        await fetch("http://localhost:5089/api/command/make_patch",{
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: formData

@@ -170,7 +170,7 @@ export default function DataTree({ id, title }: { id?: number, title?: string })
         useViewTreeStore.getState().resetTree()
         setExpanded(new Set())
         setSelectedId(null)
-        runSSE(`http://localhost:5013/api/command/view/${id}`).catch(() => {
+        runSSE(`http://localhost:5089/api/command/view/${id}`).catch(() => {
             useViewTreeStore.getState().setError("连接失败，无法获取数据")
         })
     }, [id])
