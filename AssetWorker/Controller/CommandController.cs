@@ -121,7 +121,6 @@ namespace AssetWorker.Controller
         {
             Response.Headers.ContentType = "text/event-stream";
             Response.Headers.CacheControl = "no-cache";
-            // 经过 nginx 等反代时禁用响应缓冲，保证事件即时到达
             Response.Headers["X-Accel-Buffering"] = "no";
             Response.Headers["Access-Control-Allow-Origin"] = "*";
 

@@ -32,7 +32,6 @@ export default function ExtractToolBar({ title, id }: { title: string, id: numbe
             setIsScanEnd(true)
             await manager.updateProjectStatus(id, 2)
             await runSSE(`http://localhost:5089/api/command/extract`)
-            setIsFirstScan(false);
             await manager.updateProjectStatus(id, 3)
         } else {
             const status = await gm.selectScanStatus();
@@ -44,9 +43,9 @@ export default function ExtractToolBar({ title, id }: { title: string, id: numbe
                 setTotalResult(status.line ?? 0);
             }
             await runSSE(`http://localhost:5089/api/command/extract`);
-            setIsFirstScan(false);
             await manager.updateProjectStatus(id, 3)
         }
+        setIsScanStart(false);
     }
     const handleStopBtn = async () => {
         setStatus(3);

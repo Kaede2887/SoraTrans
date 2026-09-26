@@ -326,6 +326,9 @@ async fn close_all_db(manager: &db_manager::DbManager) -> Result<(), String> {
     Ok(())
 }
 
+// AssetWorker sidecar 子进程句柄，主程序关闭时取出并显式 kill
+struct AssetWorkerProcess(std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
+
 // 启动 AssetWorker sidecar（.NET 8 自包含 ASP.NET Core 服务）
 // sidecar() 只传文件名，运行时解析为 <主程序目录>/AssetWorker.exe；
 // classdata.tpk / e_sqlite3.dll 作为 resources 打包到同级目录，与其 AppContext.BaseDirectory 一致。
@@ -344,11 +347,14 @@ fn spawn_asset_worker(app: &mut App) {
 
     match command.spawn() {
         Ok((mut rx, child)) => {
-            // Rust 侧 spawn 的进程不在插件的 RunEvent::Exit 清理列表里，
-            // 将 child 移入常驻任务保活；runtime 退出时 kill_on_drop 回收进程。
-            // 同时持续消费输出，防止管道缓冲区写满导致子进程阻塞。
+            app.state::<AssetWorkerProcess>()
+                .0
+                .lock()
+                .unwrap()
+                .replace(child);
+
+            // 持续消费输出，防止管道缓冲区写满导致子进程阻塞
             tauri::async_runtime::spawn(async move {
-                let _child = child;
                 while let Some(event) = rx.recv().await {
                     match event {
                         CommandEvent::Stdout(line) => {
@@ -369,6 +375,8 @@ fn spawn_asset_worker(app: &mut App) {
     }
 }
 
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let manager = db_manager::DbManager::new();
@@ -387,8 +395,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .manage(manager)
+        .manage(AssetWorkerProcess(Default::default()))
         .setup(move |app| {
-            spawn_asset_worker(app);
+            // spawn_asset_worker(app);
 
             let manager = manager_for_setup.clone();
 
@@ -419,6 +428,19 @@ pub fn run() {
                             eprintln!("关闭数据库失败: {}", e);
                         }
                     });
+
+                    // 关闭 AssetWorker sidecar，避免主程序退出后子进程残留
+                    if let Some(child) = app_handle
+                        .state::<AssetWorkerProcess>()
+                        .0
+                        .lock()
+                        .unwrap()
+                        .take()
+                    {
+                        if let Err(e) = child.kill() {
+                            log::error!("关闭 AssetWorker 失败: {e}");
+                        }
+                    }
 
                     if let Some(main) = app_handle.get_webview_window("main") {
                         let _ = main.destroy();

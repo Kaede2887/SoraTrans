@@ -30,7 +30,6 @@ public class AssetWriter(AssetsManager assetsManager)
 
             if (goInfo == null)
             {
-                // TODO: log
                 continue;
             }
 
@@ -41,7 +40,6 @@ public class AssetWriter(AssetsManager assetsManager)
 
                 if (value == null)
                 {
-                    // TODO: log
                     continue;
                 }
 

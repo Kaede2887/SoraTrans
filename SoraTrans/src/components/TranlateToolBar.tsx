@@ -4,8 +4,12 @@ import { DownloadIcon } from "lucide-react"
 import { ReactNode, useState } from "react"
 import { FiFileText, FiTable } from "react-icons/fi"
 import { open } from '@tauri-apps/plugin-dialog';
+import { join } from '@tauri-apps/api/path';
 import { fetch } from '@tauri-apps/plugin-http';
 import { PatchDialog, PatchPhase } from "./PatchDialog";
+
+// 与 AssetWorker 端 AssetScanner.OutputFolderName 保持一致
+const OUTPUT_FOLDER_NAME = "SoraTransOutput";
 
 export default function TranslateToolBar() {
 
@@ -65,7 +69,9 @@ export default function TranslateToolBar() {
         })
         if (!dir) return;
 
-        setPatchDir(dir)
+        // 补丁实际写入所选目录下的固定子目录，对话框展示/打开该目录
+        const outDir = await join(dir, OUTPUT_FOLDER_NAME);
+        setPatchDir(outDir)
         setPatchError("")
         setPatchPhase("making")
         setPatchOpen(true)

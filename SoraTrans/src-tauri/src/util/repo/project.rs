@@ -125,6 +125,28 @@ pub async fn insert_batch_project_info(
 }
 
 pub async fn delete_project_info(manager: &DbManager, id: i64) -> Result<(), String> {
+    // 先关闭并删除项目库文件，成功后再提交主库删除：
+    // 否则一旦文件删除失败（曾被常驻 sidecar 连接池锁住），项目记录已消失、
+    // 库文件成为孤儿，id 复用时会读到上一轮的旧数据
+    if manager.is_game_open(id).await {
+        manager.close_game().await?;
+    }
+
+    // 删除项目对应的 SQLite 文件
+    let path = DbManager::game_db_path(id)?;
+
+    if path.exists() {
+        fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+
+    // sqlx 以 WAL 模式打开库，残留的 -wal/-shm 在 id 被复用重新建库时
+    // 可能回放旧页导致数据"复活"，一并清理（不存在则忽略）
+    for suffix in ["-wal", "-shm"] {
+        let mut side_path = path.clone().into_os_string();
+        side_path.push(suffix);
+        let _ = fs::remove_file(side_path);
+    }
+
     let db = manager.sora_db().await?;
     // 开启事务
     let mut tx = db.begin().await.map_err(|e| e.to_string())?;
@@ -142,18 +164,6 @@ pub async fn delete_project_info(manager: &DbManager, id: i64) -> Result<(), Str
         .map_err(|e| e.to_string())?;
 
     tx.commit().await.map_err(|e| e.to_string())?;
-
-    // 关闭项目数据库
-    if manager.is_game_open(id).await {
-        manager.close_game().await?;
-    }
-
-    // 删除项目对应的 SQLite 文件
-    let path = DbManager::game_db_path(id)?;
-
-    if path.exists() {
-        fs::remove_file(path).map_err(|e| e.to_string())?;
-    }
 
     Ok(())
 }

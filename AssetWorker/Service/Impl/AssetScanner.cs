@@ -6,6 +6,13 @@ namespace AssetWorker.Service.Impl
 {
     public class AssetScanner
     {
+        /// <summary>
+        /// 补丁输出目录的固定名称：make_patch 会在用户所选目录下创建该子目录，
+        /// 扫描时整棵剪枝跳过，避免导出位置选在游戏目录内时扫到补丁文件
+        /// （补丁包与原始资源同名但结构不完整，会被识别为无法打开的脏数据）
+        /// </summary>
+        public const string OutputFolderName = "SoraTransOutput";
+
         private static readonly AssetMapper assetMapper = new();
         private static readonly BundleMapper bundleMapper = new();
         private static readonly HashSet<string> IgnoreExtensions =
@@ -26,21 +33,54 @@ namespace AssetWorker.Service.Impl
             };
         public static List<string> FilterFile(string path)
         {
-            List<string> list = [];
-            foreach (var file in Directory.EnumerateFiles(
-                path,
-                "*",
-                SearchOption.AllDirectories))
+            var list = new List<string>();
+            // 手动递归以便整棵剪枝输出目录（EnumerateFiles 的 AllDirectories 无法跳过子树）
+            var pending = new Stack<string>();
+            pending.Push(path);
+            while (pending.Count > 0)
             {
-                string ext = Path.GetExtension(file);
+                var dir = pending.Pop();
 
-                if (!string.IsNullOrEmpty(ext) &&
-                   IgnoreExtensions.Contains(ext))
+                IEnumerable<string> files;
+                IEnumerable<string> subDirs;
+                try
+                {
+                    files = Directory.EnumerateFiles(dir);
+                    subDirs = Directory.EnumerateDirectories(dir);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    continue;
+                }
+                catch (DirectoryNotFoundException)
                 {
                     continue;
                 }
 
-                list.Add(file);
+                foreach (var file in files)
+                {
+                    string ext = Path.GetExtension(file);
+
+                    if (!string.IsNullOrEmpty(ext) &&
+                       IgnoreExtensions.Contains(ext))
+                    {
+                        continue;
+                    }
+
+                    list.Add(file);
+                }
+
+                foreach (var subDir in subDirs)
+                {
+                    if (string.Equals(
+                            Path.GetFileName(subDir),
+                            OutputFolderName,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    pending.Push(subDir);
+                }
             }
             return list;
         }

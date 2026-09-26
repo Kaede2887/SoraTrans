@@ -19,7 +19,7 @@ namespace AssetWorker.Service.Impl
         private readonly TextOriginMapper textOriginMapper = new();
         private readonly AssetObjectMapper assetObjectMapper = new();
         private const long LargeFileThreshold = 256 * 1024 * 1024;
-        private static readonly Regex JapaneseRegex = new("[\u3040-\u309F\u30A0-\u30FF]");
+        private static readonly Regex FindRegex = new("[\u3000-\u30ff\u3400-\u4dbf\u4e00-\u9fff]");
 
         public IEnumerable<FileScanEvent> ExtractBundle(string dbPath, BundleFileInstance bunInst)
         {
@@ -290,7 +290,7 @@ namespace AssetWorker.Service.Impl
         private static bool ContainsJapanese(string strVal)
         {
             if (string.IsNullOrWhiteSpace(strVal)) return false;
-            return JapaneseRegex.IsMatch(strVal);
+            return FindRegex.IsMatch(strVal);
         }
 
         /// <summary>

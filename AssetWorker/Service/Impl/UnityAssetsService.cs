@@ -442,58 +442,69 @@ namespace AssetWorker.Service.Impl
                     "CurrentDbPath尚未初始化，请先调用 init 接口");
             }
 
-            // Directory.CreateDirectory(dir);
-
-            var assetWriter = new AssetWriter(manager);
-
-            var list = textOriginMapper
-                .SelectMakePatchInfo(session.CurrentDbPath)
-                .ToList();
-
-            Dictionary<string, List<MakePatchInfo>> assetSet = [];
-            Dictionary<string, List<MakePatchInfo>> bundleSet = [];
-
-
-            foreach (var info in list)
+            try
             {
-                if (string.IsNullOrEmpty(info.BundleName))
+                // 固定写入用户所选目录下的 SoraTransOutput 子目录：
+                // 扫描会按目录名整棵排除，允许用户把导出位置选在游戏目录内
+                var outDir = Path.Combine(dir, AssetScanner.OutputFolderName);
+                Directory.CreateDirectory(outDir);
+
+                var assetWriter = new AssetWriter(manager);
+
+                var list = textOriginMapper
+                    .SelectMakePatchInfo(session.CurrentDbPath)
+                    .ToList();
+
+                Dictionary<string, List<MakePatchInfo>> assetSet = [];
+                Dictionary<string, List<MakePatchInfo>> bundleSet = [];
+
+                foreach (var info in list)
                 {
-                    if (!assetSet.TryGetValue(info.AssetPath, out var infoList))
+                    if (string.IsNullOrEmpty(info.BundleName))
                     {
-                        infoList = [];
-                        assetSet[info.AssetPath] = infoList;
+                        if (!assetSet.TryGetValue(info.AssetPath, out var infoList))
+                        {
+                            infoList = [];
+                            assetSet[info.AssetPath] = infoList;
+                        }
+                        infoList.Add(info);
                     }
-                    infoList.Add(info);
+                    else
+                    {
+                        if (!bundleSet.TryGetValue(info.AssetName, out var infoList))
+                        {
+                            infoList = [];
+                            bundleSet[info.AssetName] = infoList;
+                        }
+                        infoList.Add(info);
+                    }
                 }
-                else
+
+                foreach (var item in assetSet)
                 {
-                    if (!bundleSet.TryGetValue(info.AssetName, out var infoList))
-                    {
-                        infoList = [];
-                        bundleSet[info.AssetName] = infoList;
-                    }
-                    infoList.Add(info);
+                    var fileInst = manager.LoadAssetsFile(item.Key, true);
+                    var tmpPath = item.Value[0].AssetName + ".tmp";
+                    var outPath = Path.Combine(outDir, item.Value[0].AssetName);
+                    assetWriter.MakeAssetPatch(fileInst, item.Value, tmpPath);
+                    File.Move(tmpPath, outPath, true);
+                }
+
+                foreach (var item in bundleSet)
+                {
+                    var bunInst = manager.LoadBundleFile(item.Value[0].BundlePath, true);
+                    var index = bunInst.file.GetFileIndex(item.Key);
+                    var fileInst = manager.LoadAssetsFileFromBundle(bunInst, index, true);
+                    var tmpPath = item.Value[0].BundleName + ".tmp";
+                    var outPath = Path.Combine(outDir, item.Value[0].BundleName);
+                    assetWriter.MakeBundlePatch(bunInst, fileInst, item.Value, index, tmpPath);
+                    File.Move(tmpPath, outPath, true);
                 }
             }
-
-            foreach (var item in assetSet)
+            finally
             {
-                var fileInst = manager.LoadAssetsFile(item.Key, true);
-                var tmpPath = item.Value[0].AssetName + ".tmp";
-                var outPath = Path.Combine(dir, item.Value[0].AssetName);
-                assetWriter.MakeAssetPatch(fileInst, item.Value, tmpPath);
-                File.Move(tmpPath, outPath, true);
-            }
-
-            foreach (var item in bundleSet)
-            {
-                var bunInst = manager.LoadBundleFile(item.Value[0].BundlePath, true);
-                var index = bunInst.file.GetFileIndex(item.Key);
-                var fileInst = manager.LoadAssetsFileFromBundle(bunInst, index, true);
-                var tmpPath = item.Value[0].BundleName + ".tmp";
-                var outPath = Path.Combine(dir, item.Value[0].BundleName);
-                assetWriter.MakeBundlePatch(bunInst, fileInst, item.Value, index, tmpPath);
-                File.Move(tmpPath, outPath, true);
+                manager.UnloadAll();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
             }
         }
 
