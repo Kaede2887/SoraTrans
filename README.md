@@ -93,7 +93,7 @@ SoraTrans 采用桌面应用与 Unity 资源处理服务分离的架构。
 ┌─────────────────────────────────────────┐
 │              AssetWorker                │
 │                                         │
-│  C# / .NET 8                           │
+│  C# / .NET 8                            │
 │            │                            │
 │            ├── Unity Resource Scanner   │
 │            ├── Asset Parser             │
