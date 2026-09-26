@@ -7,7 +7,7 @@ SoraTrans 是一款基于 **Tauri、React、Rust 和 C#/.NET** 开发的 Unity �
 * **Unity 游戏扫描**
 
   * 自动识别 Unity 游戏目录及相关资源
-  * 扫描游戏中的 AssetBundle、Assets 等资源文件
+  * 扫描游戏中的 Bundle、Assets 等资源文件
   * 建立游戏资源索引
 
 * **Unity 资源解析**
@@ -30,7 +30,7 @@ SoraTrans 是一款基于 **Tauri、React、Rust 和 C#/.NET** 开发的 Unity �
 
 * **AssetBundle 修改**
 
-  * 支持修改 AssetBundle 内部的 Assets 文件
+  * 支持修改 Bundle 内部的 Assets 文件
   * 支持修改后的资源重新写入 Bundle
   * 支持批量处理多个资源文件
 
@@ -59,7 +59,7 @@ Rust 负责桌面应用的核心逻辑、数据库管理、项目管理以及与
 
 ### Unity Resource Processing
 
-* [.NET 8](https://dotnet.microsoft.com/)
+* [.NET 9](https://dotnet.microsoft.com/)
 * [AssetsTools.NET](https://github.com/nesrak1/AssetsTools.NET)
 * [Cpp2IL](https://github.com/SamboyCoding/Cpp2IL)
 * [LibCpp2IL](https://github.com/SamboyCoding/Cpp2IL)
@@ -93,7 +93,7 @@ SoraTrans 采用桌面应用与 Unity 资源处理服务分离的架构。
 ┌─────────────────────────────────────────┐
 │              AssetWorker                │
 │                                         │
-│  C# / .NET 8                            │
+│  C# / .NET 9                            │
 │            │                            │
 │            ├── Unity Resource Scanner   │
 │            ├── Asset Parser             │
@@ -132,23 +132,6 @@ AssetBundle Repacking
 Localized Game
 ```
 
-## Text Localization
-
-Unity 游戏中的字符串并不一定都是可以直接修改的本地化文本。
-
-某些字符串可能同时承担资源名称、Dictionary Key、资源查找参数、内部 ID 等作用。直接修改这些字符串可能导致游戏无法正常加载资源或运行。
-
-因此，SoraTrans 在文本提取过程中不仅关注字符串本身的语言特征，也会结合：
-
-* Unity Asset 类型
-* 字段路径
-* 字段名称
-* 资源结构
-* 字符串出现位置
-* 运行时引用关系
-
-对文本进行分析，以降低修改运行时关键字符串所产生的问题。
-
 ## Project Status
 
 SoraTrans 目前处于开发阶段。
@@ -160,7 +143,7 @@ SoraTrans 目前处于开发阶段。
 * 文本提取
 * 翻译数据导入
 * Unity Asset 修改
-* AssetBundle 重新打包
+* Bundle 重新打包
 * 可本地化文本识别
 * Unity 游戏兼容性
 
@@ -173,7 +156,7 @@ SoraTrans 目前处于开发阶段。
 * Windows
 * Rust
 * Node.js
-* .NET 8 SDK
+* .NET 9 SDK
 
 具体版本要求会随着项目开发逐步确定。
 
@@ -184,7 +167,7 @@ SoraTrans 目前处于开发阶段。
 克隆项目：
 
 ```bash
-git clone https://github.com/yourname/SoraTrans.git
+git clone https://github.com/Kaede2887/SoraTrans.git
 cd SoraTrans
 ```
 
