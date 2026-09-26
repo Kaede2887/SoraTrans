@@ -1,0 +1,59 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "main",
+    "project",
+    "viewdata",
+    "viewtext"
+  ],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "core:window:allow-close",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-start-dragging",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:webview:allow-create-webview-window",
+    "core:path:default",
+    "fs:allow-exists",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
+    "fs:scope-appdata",
+    "fs:allow-write-text-file",
+    "fs:allow-read-text-file",
+    "dialog:default",
+    "os:default",
+    "log:default",
+    "http:default",
+    {
+      "identifier": "fs:scope-appdata",
+      "allow": [
+        "$APPDATA/**",
+        "$APPDATA/game/**"
+      ]
+    },
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://*.tauri.app"
+        },
+        {
+          "url": "https://api.vndb.org/kana/vn"
+        },
+        {
+          "url": "http://localhost:5013/api/command/*"
+        }
+      ],
+      "deny": [
+        {
+          "url": "https://private.tauri.app"
+        }
+      ]
+    }
+  ]
+}
