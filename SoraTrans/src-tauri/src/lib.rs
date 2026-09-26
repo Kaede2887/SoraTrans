@@ -51,6 +51,25 @@ async fn open_folder(path: String) {
         .unwrap();
 }
 
+// 打开路径本身（区别于 open_folder 打开父目录），用于补丁完成后跳转导出目录
+#[tauri::command]
+async fn open_dir(path: String) {
+    #[cfg(target_os = "macos")]
+    let command = "open";
+
+    #[cfg(target_os = "windows")]
+    let command = "explorer";
+
+    #[cfg(target_os = "linux")]
+    let command = "xdg-open";
+
+    std::process::Command::new(command)
+        .arg(&path)
+        .spawn()
+        .map_err(|e| e.to_string())
+        .unwrap();
+}
+
 #[tauri::command]
 async fn get_scan_info(app: tauri::AppHandle, select: Vec<ScanInfo>) -> Vec<ProjectInfo> {
     let base_path = app.path().app_data_dir().unwrap();
@@ -142,6 +161,15 @@ async fn select_project_info(
 ) -> Result<ProjectInfo, String> {
     let info = project::select_project_info(&manager, id).await?;
     Ok(info)
+}
+
+#[tauri::command]
+async fn update_project_status(
+    manager: State<'_, db_manager::DbManager>,
+    id: i64,
+    status: i64,
+) -> Result<(), String> {
+    project::update_project_status(&manager, id, status).await
 }
 
 #[tauri::command]
@@ -358,10 +386,12 @@ pub fn run() {
             run_application,
             scan_info,
             open_folder,
+            open_dir,
             get_scan_info,
             insert_project_info,
             select_project_info_list,
             select_project_info,
+            update_project_status,
             search_project_info,
             insert_batch_project_info,
             delete_project_info,

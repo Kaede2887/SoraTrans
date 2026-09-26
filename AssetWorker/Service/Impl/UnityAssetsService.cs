@@ -78,6 +78,10 @@ namespace AssetWorker.Service.Impl
 
             Stopwatch stopwatch = Stopwatch.StartNew();
 
+            // 新任务启动时清除遗留的暂停位：上轮任务可能在暂停中被窗口关闭取消，
+            // TaskControl 是进程级状态，不复位会让新任务在 WaitIfPaused 处永久阻塞
+            _scanControl.Resume();
+
             foreach (var item in AssetScanner.ScanFile(fileList, session.CurrentDbPath))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -182,6 +186,11 @@ namespace AssetWorker.Service.Impl
             AssetExtractor extractor = new(manager);
 
             if (res.extractList == null) throw new InvalidOperationException("extractList为空");
+
+            // 新任务启动时清除遗留的暂停位：上轮任务可能在暂停中被窗口关闭取消，
+            // 不复位会让新任务在 WaitIfPaused 处永久阻塞
+            _extractControl.Resume();
+
             // 流式写库：单事务复用，提取结果不再全量堆积在内存
             using var inserter = assetObjectMapper.CreateBatchInserter(session.CurrentDbPath);
             // 当前驻留在 manager 缓存中的 bundle：切换到别的 bundle 时卸载旧的。
@@ -193,8 +202,8 @@ namespace AssetWorker.Service.Impl
                 foreach (var item in res.extractList)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    _scanControl.WaitIfPaused(cancellationToken);
-                    
+                    _extractControl.WaitIfPaused(cancellationToken);
+
                     if (item.BundleName != null)
                     {
                         var fileCount = 0;

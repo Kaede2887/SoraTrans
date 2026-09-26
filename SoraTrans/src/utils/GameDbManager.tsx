@@ -114,7 +114,6 @@ class GameDbManager {
     async selectPatternTree(id: number) {
         try {
             const resList = await invoke<{ id: number, semantic: string, count: number }[]>("select_pattern_tree",{id:id})
-            console.log(`resList: ${JSON.stringify(resList)}`)
             const rootMap = new Map<string, FileTreeItem>();
             for (let res of resList) {
                 let parts = res.semantic.split(".");

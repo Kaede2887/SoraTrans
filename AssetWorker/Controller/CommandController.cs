@@ -87,6 +87,7 @@ namespace AssetWorker.Controller
         [HttpPost("scan/pause")]
         public IActionResult PauseScan()
         {
+            Console.WriteLine($"接收到前端请求,处理扫描暂停");
             _unityAssetsService.PauseScan();
             return Ok();
         }
@@ -94,6 +95,7 @@ namespace AssetWorker.Controller
         [HttpPost("scan/resume")]
         public IActionResult ResumeScan()
         {
+            Console.WriteLine($"接收到前端请求,处理扫描恢复");
             _unityAssetsService.ResumeScan();
             return Ok();
         }
@@ -101,6 +103,7 @@ namespace AssetWorker.Controller
         [HttpPost("extract/pause")]
         public IActionResult PauseExtract()
         {
+            Console.WriteLine($"接收到前端请求,处理解析暂停");
             _unityAssetsService.PauseExtract();
             return Ok();
         }
@@ -108,6 +111,7 @@ namespace AssetWorker.Controller
         [HttpPost("extract/resume")]
         public IActionResult ResumeExtract()
         {
+             Console.WriteLine($"接收到前端请求,处理解析恢复");
             _unityAssetsService.ResumeExtract();
             return Ok();
         }
@@ -203,6 +207,7 @@ namespace AssetWorker.Controller
         [HttpPost("make_patch")]
         public IActionResult MakePatch([FromForm] string dir)
         {
+             Console.WriteLine($"接收到前端请求,处理补丁制作");
             _unityAssetsService.MakePatch(dir);
             return Ok();
         }

@@ -53,7 +53,7 @@ function Editor() {
       <SideBar setCurrentTab={setCurrentTab} />
       <main className="absolute top-[40px] left-[40px] right-0 bottom-0">
         {currentTab === 1 && <GamesView id={id} dbPath={dbPath} />}
-        {currentTab === 2 && <ExtractView title={title} />}
+        {currentTab === 2 && <ExtractView title={title} id={id} />}
         {currentTab === 3 && <TranslateView />}
         {currentTab === 4 && <FontView />}
         {currentTab === 5 && <AboutView />}

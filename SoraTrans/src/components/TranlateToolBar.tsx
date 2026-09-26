@@ -1,10 +1,11 @@
 import { useAssetObjectStore } from "@/model/AssetObjectInfo"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { DownloadIcon, UploadIcon } from "lucide-react"
-import { ReactNode } from "react"
+import { ReactNode, useState } from "react"
 import { FiFileText, FiTable } from "react-icons/fi"
 import { open } from '@tauri-apps/plugin-dialog';
 import { fetch } from '@tauri-apps/plugin-http';
+import { PatchDialog, PatchPhase } from "./PatchDialog";
 
 export default function TranslateToolBar() {
 
@@ -51,6 +52,11 @@ export default function TranslateToolBar() {
         });
     }
 
+    const [patchOpen, setPatchOpen] = useState(false)
+    const [patchPhase, setPatchPhase] = useState<PatchPhase>("making")
+    const [patchError, setPatchError] = useState("")
+    const [patchDir, setPatchDir] = useState("")
+
     const handleMakePatch = async () => {
         const dir = await open({
             title: "选择导出文件夹",
@@ -58,13 +64,25 @@ export default function TranslateToolBar() {
             directory: true,
         })
         if (!dir) return;
-        const formData = new URLSearchParams();
-        formData.append('dir', dir);
-        await fetch("http://localhost:5089/api/command/make_patch",{
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: formData
-        })
+
+        setPatchDir(dir)
+        setPatchError("")
+        setPatchPhase("making")
+        setPatchOpen(true)
+        try {
+            const formData = new URLSearchParams();
+            formData.append('dir', dir);
+            const res = await fetch("http://localhost:5089/api/command/make_patch",{
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: formData
+            })
+            if (!res.ok) throw new Error(`服务返回状态 ${res.status}`)
+            setPatchPhase("done")
+        } catch (e) {
+            setPatchError(String(e))
+            setPatchPhase("error")
+        }
     }
 
     return (
@@ -107,6 +125,7 @@ export default function TranslateToolBar() {
                     <ToolBtn onClick={handleMakePatch} icon={<DownloadIcon size={10} className="text-neutral-500" />} text="制作补丁" />
                 </div>
             </div>
+            <PatchDialog open={patchOpen} phase={patchPhase} errorMsg={patchError} dir={patchDir} onOpenChange={setPatchOpen} />
         </div>
     )
 }

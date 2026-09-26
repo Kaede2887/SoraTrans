@@ -7,7 +7,7 @@ import { useExtractProgressTable } from "@/utils/useExtractProgress";
 import { useEffect } from "react";
 
 
-export default function ExtractView({title}:{title:string}) {
+export default function ExtractView({title, id}:{title:string, id: number | null}) {
 
     useEffect(()=>{
         const handleScan = async () => {
@@ -27,7 +27,7 @@ export default function ExtractView({title}:{title:string}) {
 
     return (
         <div className="w-full h-full flex flex-col gap-2 px-4 pb-2 overflow-hidden">
-            <ExtractToolBar title={title}/>
+            <ExtractToolBar title={title} id={id}/>
             <div className="w-full flex-1 flex gap-2">
                 <ExtractProgress />
                 <div className="w-2/5 h-full gap-2 flex flex-col">

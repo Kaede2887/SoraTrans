@@ -58,6 +58,14 @@ class DbManager {
         }
     }
 
+    async updateProjectStatus(id: number, status: number) {
+        try {
+            await invoke("update_project_status",{id: id, status: status})
+        } catch (error) {
+            info(`更新项目状态失败:${error}`);
+        }
+    }
+
     async deleteProjectInfo(id: number) {
         try {
             await invoke("delete_project_info",{id: id})

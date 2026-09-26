@@ -173,6 +173,21 @@ pub async fn rename_project_info(manager: &DbManager, val: String, id: i64) -> R
     Ok(())
 }
 
+pub async fn update_project_status(manager: &DbManager, id: i64, status: i64) -> Result<(), String> {
+    let db = manager.sora_db().await?;
+
+    let mut conn = db.acquire().await.map_err(|e| e.to_string())?;
+
+    sqlx::query("UPDATE project_info SET status = ? WHERE id = ?")
+        .bind(status)
+        .bind(id)
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 pub async fn complete_project_info(
     manager: &DbManager,
     id: i64,

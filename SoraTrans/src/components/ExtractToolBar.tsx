@@ -4,9 +4,10 @@ import ScanStatus from "./ScanStatus";
 import { useState } from "react";
 import { useExtractProgressTable } from "@/utils/useExtractProgress";
 import { gm } from "@/utils/GameDbManager";
+import { manager } from "@/utils/DbManager";
 import runSSE from "@/utils/SSEHandler";
 
-export default function ExtractToolBar({ title }: { title: string }) {
+export default function ExtractToolBar({ title, id }: { title: string, id: number | null }) {
 
     const [status, setStatus] = useState(0)
     const val = useExtractProgressTable((state) => state.val);
@@ -16,30 +17,62 @@ export default function ExtractToolBar({ title }: { title: string }) {
     const setScanned = useExtractProgressTable((state) => state.setScanned);
     const setTotalResult = useExtractProgressTable((state) => state.setTotalResult);
     const [isScanStart, setIsScanStart] = useState(false);
+    const [isScanEnd, setIsScanEnd] = useState<boolean>(false);
+
+
     const handleScanBtn = async () => {
+        if (!id) return;
         setStatus(1);
         setIsScanStart(true);
-        const status = await gm.selectScanStatus();
-        if (status?.total == 0) {
+        // project_info.status：0=已导入 1=已补全 2=已扫描；>=2 说明扫描已完成，直接进入提取
+        const info = await manager.selectProjectInfo(id);
+        if ((info?.status ?? 0) < 2) {
             setIsFirstScan(true);
             await runSSE(`http://localhost:5089/api/command/scan/${title}`)
+            setIsScanEnd(true)
+            await manager.updateProjectStatus(id, 2)
             await runSSE(`http://localhost:5089/api/command/extract`)
+            setIsFirstScan(false);
+            await manager.updateProjectStatus(id, 3)
         } else {
-            if (!status) return;
-            const val = Math.ceil(status.scanned * 100.0 / status.total); 
-            setVal(val);
-            setTotal(status.total ?? 0);
-            setScanned(status.scanned ?? 0);
-            setTotalResult(status.line ?? 0);
+            const status = await gm.selectScanStatus();
+            if (status && status.total > 0) {
+                const val = Math.ceil(status.scanned * 100.0 / status.total);
+                setVal(val);
+                setTotal(status.total ?? 0);
+                setScanned(status.scanned ?? 0);
+                setTotalResult(status.line ?? 0);
+            }
             await runSSE(`http://localhost:5089/api/command/extract`);
+            setIsFirstScan(false);
+            await manager.updateProjectStatus(id, 3)
         }
     }
-    const handleStopBtn = () => {
+    const handleStopBtn = async () => {
         setStatus(3);
-        setIsScanStart(false);
+
+        if (isScanEnd) {
+            await fetch("http://localhost:5089/api/command/extract/pause", {
+                method: "POST"
+            });
+        } else {
+            await fetch("http://localhost:5089/api/command/scan/pause", {
+                method: "POST"
+            });
+        }
     }
-    const handleSecondScanBtn = () => {
-        
+    const handleContinueBtn = async () => {
+        setStatus(1);
+
+        if (isScanEnd) {
+            await fetch("http://localhost:5089/api/command/extract/resume", {
+                method: "POST"
+            });
+        } else {
+            await fetch("http://localhost:5089/api/command/scan/resume", {
+                method: "POST"
+            });
+        }
     }
 
     return (
@@ -52,7 +85,7 @@ export default function ExtractToolBar({ title }: { title: string }) {
                 <div className="flex gap-2">
                     {
                         isScanStart ? (
-                            val != 100 ? (
+                            status != 3 ? (
                                 <button onClick={handleStopBtn} className="w-14 h-6 gap-1
                                     flex items-center justify-center cursor-pointer 
                                     text-semibold rounded-sm text-black text-xs
@@ -61,12 +94,12 @@ export default function ExtractToolBar({ title }: { title: string }) {
                                     <span className="select-none">暂停</span>
                                 </button>
                             ) : (
-                                <button onClick={handleSecondScanBtn} className="w-14 h-6 gap-1 
+                                <button onClick={handleContinueBtn} className="w-14 h-6 gap-1 
                                     flex items-center justify-center cursor-pointer 
                                     text-semibold rounded-sm text-white text-xs 
                                     bg-[#0067c0] hover:bg-[#0067c0]/70">
                                     <FiPlay />
-                                    <span className="select-none">扫描</span>
+                                    <span className="select-none">继续</span>
                                 </button>
                             )
                         ) : (
