@@ -197,3 +197,11 @@ SoraTrans 主要用于 Unity 游戏本地化、资源格式研究以及相关技
 SoraTrans is licensed under the [MIT License](LICENSE).
 
 Copyright © 2026 SoraTrans.
+
+## Third-Party Licenses
+
+SoraTrans 使用了多个开源项目和第三方库。
+
+这些依赖的版权及许可证归其各自作者所有，并按照其原始许可证使用。
+
+相关许可证信息请参阅各依赖项目的 LICENSE 文件及 NuGet/npm 包信息。
