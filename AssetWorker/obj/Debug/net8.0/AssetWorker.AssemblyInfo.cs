@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AssetWorker")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3552f19287b5f4b38e4096defcb2b0923cbc9461")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a2a5a5a9e387fe5ff37392dc6270f73dfd287941")]
 [assembly: System.Reflection.AssemblyProductAttribute("AssetWorker")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AssetWorker")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

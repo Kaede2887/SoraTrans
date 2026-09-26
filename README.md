@@ -29,6 +29,7 @@ SoraTrans 是一款基于 **Tauri、React、Rust 和 C#/.NET** 开发的 Unity �
   * 保留原文与资源位置之间的关联关系
 
 * **Asset / Bundle 修改**
+
   * 基于 AssetsTools.NET 修改 Unity 资源
   * 支持修改 Bundle 内部的 Assets 文件
   * 支持修改后的资源重新写入 Asset / Bundle
@@ -126,7 +127,7 @@ SoraTrans 目前处于开发阶段。
 * Windows
 * Rust
 * Node.js
-* .NET 8SDK
+* .NET 8 SDK
 
 具体版本要求会随着项目开发逐步确定。
 
