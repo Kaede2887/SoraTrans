@@ -482,22 +482,50 @@ namespace AssetWorker.Service.Impl
 
                 foreach (var item in assetSet)
                 {
-                    var fileInst = manager.LoadAssetsFile(item.Key, true);
-                    var tmpPath = item.Value[0].AssetName + ".tmp";
+                    AssetsFileInstance? fileInst = null;
+                    var tmpPath = Path.Combine(outDir, item.Value[0].AssetName + ".tmp");
                     var outPath = Path.Combine(outDir, item.Value[0].AssetName);
-                    assetWriter.MakeAssetPatch(fileInst, item.Value, tmpPath);
-                    File.Move(tmpPath, outPath, true);
+                    try
+                    {
+                        fileInst = manager.LoadAssetsFile(item.Key, true);
+                        assetWriter.MakeAssetPatch(fileInst, item.Value, tmpPath);
+                        File.Move(tmpPath, outPath, true);
+                    }
+                    finally
+                    {
+                        // 写完即卸载，避免几十个资源文件同时驻留 manager 造成内存峰值；
+                        // tmp 移动成功后已不存在，仅在写补丁/移动失败时清理残留
+                        if (fileInst != null)
+                            AssetExtractor.SafeUnloadAssetsFile(manager, fileInst.path);
+                        if (File.Exists(tmpPath))
+                            File.Delete(tmpPath);
+                    }
                 }
 
                 foreach (var item in bundleSet)
                 {
-                    var bunInst = manager.LoadBundleFile(item.Value[0].BundlePath, true);
-                    var index = bunInst.file.GetFileIndex(item.Key);
-                    var fileInst = manager.LoadAssetsFileFromBundle(bunInst, index, true);
-                    var tmpPath = item.Value[0].BundleName + ".tmp";
+                    BundleFileInstance? bunInst = null;
+                    AssetsFileInstance? fileInst = null;
+                    var tmpPath = Path.Combine(outDir, item.Value[0].BundleName + ".tmp");
                     var outPath = Path.Combine(outDir, item.Value[0].BundleName);
-                    assetWriter.MakeBundlePatch(bunInst, fileInst, item.Value, index, tmpPath);
-                    File.Move(tmpPath, outPath, true);
+                    try
+                    {
+                        bunInst = manager.LoadBundleFile(item.Value[0].BundlePath, true);
+                        var index = bunInst.file.GetFileIndex(item.Key);
+                        fileInst = manager.LoadAssetsFileFromBundle(bunInst, index, true);
+                        assetWriter.MakeBundlePatch(bunInst, fileInst, item.Value, index, tmpPath);
+                        File.Move(tmpPath, outPath, true);
+                    }
+                    finally
+                    {
+                        // 实例重载连带注销 bundle 内懒加载的依赖 assets 文件
+                        if (bunInst != null)
+                            AssetExtractor.SafeUnloadBundleInstance(manager, bunInst);
+                        else if (fileInst != null)
+                            AssetExtractor.SafeUnloadAssetsFile(manager, fileInst.path);
+                        if (File.Exists(tmpPath))
+                            File.Delete(tmpPath);
+                    }
                 }
             }
             finally
