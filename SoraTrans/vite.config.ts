@@ -13,6 +13,8 @@ export default defineConfig(async () => ({
       input: {
         launcher: "launcher.html",
         editor: "editor.html",
+        viewtext: "viewtext.html",
+        viewdata: "viewdata.html"
       },
     },
   },

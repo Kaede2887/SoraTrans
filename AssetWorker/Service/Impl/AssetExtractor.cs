@@ -344,5 +344,10 @@ namespace AssetWorker.Service.Impl
         {
             try { manager.UnloadBundleFile(bundle); } catch { }
         }
+
+        internal static void SafeUnloadAllInstance(AssetsManager manager)
+        {
+            try { manager.UnloadAll(); } catch { }
+        }
     }
 }
