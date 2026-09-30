@@ -37,13 +37,19 @@ pub async fn search_asset_obj_by_name(
     
     let sql = format!(
         r#"
-            SELECT assets_object.* FROM assets_object
-            LEFT JOIN text_origin
-            ON assets_object.id = text_origin.object_id
+            SELECT assets_object.*
+            FROM assets_object
             WHERE assets_object.asset_id = ?
-            AND assets_object.name LIKE '%{}%'
-            OR text_origin.text LIKE '%{}%'
-            {}   
+            AND (
+                assets_object.name LIKE '%{}%'
+                OR EXISTS (
+                    SELECT 1
+                    FROM text_origin
+                    WHERE text_origin.object_id = assets_object.id
+                    AND text_origin.text LIKE '%{}%'
+                )
+            )
+            {};  
         "#,
         val,
         val,

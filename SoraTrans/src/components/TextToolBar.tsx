@@ -96,6 +96,8 @@ export default function TextToolBar() {
 
     }
 
+    //TODO: 打开编辑器编辑
+
     return (
         <div className="px-2 py-3 flex h-full flex-col gap-1 py-1 overflow-hidden lg:py-4">
             <div className="w-full flex flex-col gap-2 py-1">
