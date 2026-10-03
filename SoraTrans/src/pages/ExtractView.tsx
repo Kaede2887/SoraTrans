@@ -10,6 +10,10 @@ import { useEffect } from "react";
 export default function ExtractView({title, id}:{title:string, id: number | null}) {
 
     useEffect(()=>{
+        // id 由 Editor 在 gm.init 完成后才 setId，因此 id 非空即代表游戏库已就绪；
+        // 若在 init 完成前就查询，select_scan_status 会报"Game 数据库尚未初始化"
+        if (id == null) return;
+
         const handleScan = async () => {
             const status = await gm.selectScanStatus();
             console.log("status查询")
@@ -23,7 +27,7 @@ export default function ExtractView({title, id}:{title:string, id: number | null
         }
 
         handleScan()
-    },[])
+    },[id])
 
     return (
         <div className="w-full h-full flex flex-col gap-2 px-4 pb-2 overflow-hidden">

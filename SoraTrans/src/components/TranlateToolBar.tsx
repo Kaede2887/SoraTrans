@@ -5,7 +5,7 @@ import { ReactNode, useState } from "react"
 import { FiFileText, FiTable } from "react-icons/fi"
 import { open } from '@tauri-apps/plugin-dialog';
 import { join } from '@tauri-apps/api/path';
-import { fetch } from '@tauri-apps/plugin-http';
+import { assetApi } from "@/utils/AssetApi";
 import { PatchDialog, PatchPhase } from "./PatchDialog";
 
 // 与 AssetWorker 端 AssetScanner.OutputFolderName 保持一致
@@ -76,14 +76,7 @@ export default function TranslateToolBar() {
         setPatchPhase("making")
         setPatchOpen(true)
         try {
-            const formData = new URLSearchParams();
-            formData.append('dir', dir);
-            const res = await fetch("http://localhost:5089/api/command/make_patch",{
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: formData
-            })
-            if (!res.ok) throw new Error(`服务返回状态 ${res.status}`)
+            await assetApi.makePatch(dir);
             setPatchPhase("done")
         } catch (e) {
             setPatchError(String(e))

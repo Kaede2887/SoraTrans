@@ -13,7 +13,7 @@ namespace AssetWorker.Mapper
             string sql = """
                 INSERT OR IGNORE INTO assets (name,size,path,parent_bundle_name)
                 VALUES (@Name,@Size,@Path,@ParentBundleName)
-                ON CONFLICT(name) DO NOTHING;
+                ON CONFLICT(path) DO NOTHING;
             """;
             conn.Execute(sql, asset);
         }

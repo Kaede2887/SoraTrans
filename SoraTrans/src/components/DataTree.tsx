@@ -1,4 +1,4 @@
-import runSSE from "@/utils/SSEHandler"
+import { assetApi } from "@/utils/AssetApi"
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Loader2 } from "lucide-react"
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -242,7 +242,7 @@ export default function DataTree({ id, title }: { id?: number, title?: string })
         setExpanded(new Set())
         setFullIds(new Set())
         setSelectedId(null)
-        runSSE(`http://localhost:5089/api/command/view/${id}`).catch(() => {
+        assetApi.view(id).catch(() => {
             useViewTreeStore.getState().setError("连接失败，无法获取数据")
         })
     }, [id])

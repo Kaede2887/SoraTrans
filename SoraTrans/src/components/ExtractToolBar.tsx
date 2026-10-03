@@ -5,7 +5,8 @@ import { useState } from "react";
 import { useExtractProgressTable } from "@/utils/useExtractProgress";
 import { gm } from "@/utils/GameDbManager";
 import { manager } from "@/utils/DbManager";
-import runSSE from "@/utils/SSEHandler";
+import { assetApi } from "@/utils/AssetApi";
+import { error } from "@tauri-apps/plugin-log";
 
 export default function ExtractToolBar({ title, id }: { title: string, id: number | null }) {
 
@@ -24,53 +25,62 @@ export default function ExtractToolBar({ title, id }: { title: string, id: numbe
         if (!id) return;
         setStatus(1);
         setIsScanStart(true);
-        // project_info.status：0=已导入 1=已补全 2=已扫描；>=2 说明扫描已完成，直接进入提取
-        const info = await manager.selectProjectInfo(id);
-        if ((info?.status ?? 0) < 2) {
-            setIsFirstScan(true);
-            await runSSE(`http://localhost:5089/api/command/scan/${title}`)
-            setIsScanEnd(true)
-            await manager.updateProjectStatus(id, 2)
-            await runSSE(`http://localhost:5089/api/command/extract`)
-            await manager.updateProjectStatus(id, 3)
-        } else {
-            const status = await gm.selectScanStatus();
-            if (status && status.total > 0) {
-                const val = Math.ceil(status.scanned * 100.0 / status.total);
-                setVal(val);
-                setTotal(status.total ?? 0);
-                setScanned(status.scanned ?? 0);
-                setTotalResult(status.line ?? 0);
+        try {
+            // project_info.status：0=已导入 1=已补全 2=已扫描；>=2 说明扫描已完成，直接进入提取
+            const info = await manager.selectProjectInfo(id);
+            if ((info?.status ?? 0) < 2) {
+                setIsFirstScan(true);
+                await assetApi.scan(title)
+                setIsScanEnd(true)
+                await manager.updateProjectStatus(id, 2)
+                await assetApi.extract()
+                await manager.updateProjectStatus(id, 3)
+            } else {
+                const status = await gm.selectScanStatus();
+                if (status && status.total > 0) {
+                    const val = Math.ceil(status.scanned * 100.0 / status.total);
+                    setVal(val);
+                    setTotal(status.total ?? 0);
+                    setScanned(status.scanned ?? 0);
+                    setTotalResult(status.line ?? 0);
+                }
+                await assetApi.extract();
+                await manager.updateProjectStatus(id, 3)
             }
-            await runSSE(`http://localhost:5089/api/command/extract`);
-            await manager.updateProjectStatus(id, 3)
+        } catch (e) {
+            // SSE 连接失败（后端未启动/扫描异常）时不能让按钮卡在"暂停"状态，
+            // 复位状态并记录日志，避免 Uncaught (in promise)
+            error(`扫描/提取任务失败: ${e}`)
+            setStatus(0)
+            setIsScanEnd(false)
+        } finally {
+            setIsScanStart(false);
         }
-        setIsScanStart(false);
     }
     const handleStopBtn = async () => {
         setStatus(3);
 
-        if (isScanEnd) {
-            await fetch("http://localhost:5089/api/command/extract/pause", {
-                method: "POST"
-            });
-        } else {
-            await fetch("http://localhost:5089/api/command/scan/pause", {
-                method: "POST"
-            });
+        try {
+            if (isScanEnd) {
+                await assetApi.pauseExtract();
+            } else {
+                await assetApi.pauseScan();
+            }
+        } catch (e) {
+            error(`暂停失败: ${e}`)
         }
     }
     const handleContinueBtn = async () => {
         setStatus(1);
 
-        if (isScanEnd) {
-            await fetch("http://localhost:5089/api/command/extract/resume", {
-                method: "POST"
-            });
-        } else {
-            await fetch("http://localhost:5089/api/command/scan/resume", {
-                method: "POST"
-            });
+        try {
+            if (isScanEnd) {
+                await assetApi.resumeExtract();
+            } else {
+                await assetApi.resumeScan();
+            }
+        } catch (e) {
+            error(`恢复失败: ${e}`)
         }
     }
 

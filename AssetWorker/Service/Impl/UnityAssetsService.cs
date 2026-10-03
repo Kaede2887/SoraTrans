@@ -36,7 +36,7 @@ namespace AssetWorker.Service.Impl
             manager.UnloadAll(false);
             string classDataPath = Path.Combine(AppContext.BaseDirectory, "classdata.tpk");
             manager.LoadClassPackage(classDataPath);
-            var env = _unityDetectService.DetectEnvInfo(initDTO.Path);
+            var env = _unityDetectService.DetectEnvInfo(initDTO.Path, initDTO.Title);
             session.Init(initDTO.DbPath);
             path = initDTO.Path;
             switch (env.Backend)
@@ -111,45 +111,57 @@ namespace AssetWorker.Service.Impl
                         Log = $"扫描发现 文件 {item.Bundle.Name}"
                     });
 
-                    var bundleInst = manager.LoadBundleFile(item.Bundle.Path);
+                    // C# 迭代器不允许在 try-catch 内 yield，先用缓冲收集，再在外部统一产出
+                    var pending = new List<(string Event, object? Data)>();
+                    BundleFileInstance? bundleInst = null;
                     try
                     {
+                        bundleInst = manager.LoadBundleFile(item.Bundle.Path);
                         foreach (var file in extractor.ExtractBundle(session.CurrentDbPath, bundleInst))
                         {
                             if (file.Bundle != null)
                             {
-                                yield return ("extract_log", new LogMessage<string>()
+                                pending.Add(("extract_log", new LogMessage<string>()
                                 {
                                     Type = "scan",
                                     Time = DateTime.Now.ToLongTimeString(),
                                     Log = $"扫描发现 文件 {file.Bundle.Name}"
-                                });
+                                }));
                             }
                             if (file.Asset != null)
                             {
-                                yield return ("extract_log", new LogMessage<string>()
+                                pending.Add(("extract_log", new LogMessage<string>()
                                 {
                                     Type = "scan",
                                     Time = DateTime.Now.ToLongTimeString(),
                                     Log = $"扫描发现 文件 {file.Asset.Name}"
-                                });
-                                yield return ("extract_filelog", new FileLogMessage()
+                                }));
+                                pending.Add(("extract_filelog", new FileLogMessage()
                                 {
                                     Type = "wait",
                                     File = file.Asset.Name
-                                });
+                                }));
                             }
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        // manager 解析不了该 bundle 时跳过，继续处理下一个文件，
+                        // 避免单个损坏资源导致整轮扫描中断
+                        pending.Add(("extract_log", new LogMessage<string>()
+                        {
+                            Type = "scan",
+                            Time = DateTime.Now.ToLongTimeString(),
+                            Log = $"跳过无法解析的文件 {item.Bundle.Name}: {ex.Message}"
+                        }));
+                    }
                     finally
                     {
-                        // ExtractBundle 枚举结束会关闭底层流，但实例仍在 manager 缓存中；
-                        // 不卸载的话，extract 阶段按同路径 LoadBundleFile 会拿到这个已关闭的实例，
-                        // 抛出 "Cannot access a closed file."
-                        // 用实例重载连带注销 bundle 内挂载的 assets 文件（含懒加载依赖），
-                        // 避免它们在 FileLookup 中残留僵尸条目
-                        AssetExtractor.SafeUnloadBundleInstance(manager, bundleInst);
+                        if (bundleInst != null)
+                            AssetExtractor.SafeUnloadBundleInstance(manager, bundleInst);
                     }
+                    foreach (var evt in pending)
+                        yield return evt;
                 }
 
 
@@ -207,46 +219,50 @@ namespace AssetWorker.Service.Impl
                     if (item.BundleName != null)
                     {
                         var fileCount = 0;
+                        var success = false;
                         if (loadedBundle != null && loadedBundle.path != item.BundlePath)
                         {
                             AssetExtractor.SafeUnloadBundleInstance(manager, loadedBundle);
                             loadedBundle = null;
                         }
-                        var bunInst = manager.LoadBundleFile(item.BundlePath);
-                        loadedBundle = bunInst;
-                        var AssetIndex = bunInst.file.GetFileIndex(item.AssetName);
+                        // C# 迭代器不允许在 try-catch 内 yield，先用缓冲收集，再在外部统一产出
+                        var pending = new List<(string Event, object? Data)>();
+                        BundleFileInstance? bunInst = null;
                         AssetsFileInstance? fileInst = null;
                         try
                         {
+                            bunInst = manager.LoadBundleFile(item.BundlePath);
+                            loadedBundle = bunInst;
+                            var AssetIndex = bunInst.file.GetFileIndex(item.AssetName);
                             fileInst = manager.LoadAssetsFileFromBundle(bunInst, AssetIndex, false);
                             foreach (var extractItem in extractor.ExtractAsset(session.CurrentDbPath, fileInst, item))
                             {
                                 switch (extractItem.type)
                                 {
                                     case "analyze":
-                                        yield return ("extract_log", new LogMessage<string>()
+                                        pending.Add(("extract_log", new LogMessage<string>()
                                         {
                                             Type = "analyze",
                                             Time = DateTime.Now.ToLongTimeString(),
                                             Log = $"分析文件 {extractItem.val}"
-                                        });
+                                        }));
                                         break;
                                     case "handle":
-                                        yield return ("extract_filelog", new FileLogMessage()
+                                        pending.Add(("extract_filelog", new FileLogMessage()
                                         {
                                             Type = "handle",
                                             File = (string?)extractItem.val
-                                        });
+                                        }));
                                         break;
                                     case "discover":
                                         line += int.TryParse(extractItem.val?.ToString(), out var lineCount) ? lineCount : 0;
                                         fileCount += int.TryParse(extractItem.val?.ToString(), out var val) ? val : 0;
-                                        yield return ("extract_log", new LogMessage<string>()
+                                        pending.Add(("extract_log", new LogMessage<string>()
                                         {
                                             Type = "discover",
                                             Time = DateTime.Now.ToLongTimeString(),
                                             Log = $"发现 {extractItem.val} 行文本"
-                                        });
+                                        }));
                                         break;
                                     case "resource":
                                         if (extractItem.val is ObjWithText obj)
@@ -256,12 +272,26 @@ namespace AssetWorker.Service.Impl
                                         break;
                                 }
                             }
+                            success = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            // manager 解析不了该资源时跳过，继续处理下一个，
+                            // 避免单个损坏资源导致整轮提取中断
+                            pending.Add(("extract_log", new LogMessage<string>()
+                            {
+                                Type = "analyze",
+                                Time = DateTime.Now.ToLongTimeString(),
+                                Log = $"跳过无法解析的资源 {item.AssetName}: {ex.Message}"
+                            }));
                         }
                         finally
                         {
                             if (fileInst != null)
                                 AssetExtractor.SafeUnloadAssetsFile(manager, fileInst.path);
                         }
+                        foreach (var evt in pending)
+                            yield return evt;
                         scanned++;
                         double elapsed = stopwatch.Elapsed.TotalSeconds;
                         double speed = scanned / elapsed;
@@ -279,10 +309,11 @@ namespace AssetWorker.Service.Impl
                         };
                         yield return ("extract_filelog", new FileLogMessage()
                         {
-                            Type = "completed",
+                            Type = success ? "completed" : "failed",
                             File = item.AssetName
                         });
-                        assetMapper.UpdateAssetInfoStatus(inserter.Connection, inserter.Transaction, item.Id, 2, fileCount);
+                        if (success)
+                            assetMapper.UpdateAssetInfoStatus(inserter.Connection, inserter.Transaction, item.Id, 2, fileCount);
                         yield return ("extract_log", new LogMessage<Progress>()
                         {
                             Type = "progress",
@@ -293,6 +324,9 @@ namespace AssetWorker.Service.Impl
                     else
                     {
                         var fileCount = 0;
+                        var success = false;
+                        // C# 迭代器不允许在 try-catch 内 yield，先用缓冲收集，再在外部统一产出
+                        var pending = new List<(string Event, object? Data)>();
                         AssetsFileInstance? fileInst = null;
                         try
                         {
@@ -302,29 +336,29 @@ namespace AssetWorker.Service.Impl
                                 switch (extractItem.type)
                                 {
                                     case "analyze":
-                                        yield return ("extract_log", new LogMessage<string>()
+                                        pending.Add(("extract_log", new LogMessage<string>()
                                         {
                                             Type = "analyze",
                                             Time = DateTime.Now.ToLongTimeString(),
                                             Log = $"分析文件 {extractItem.val}"
-                                        });
+                                        }));
                                         break;
                                     case "handle":
-                                        yield return ("extract_filelog", new FileLogMessage()
+                                        pending.Add(("extract_filelog", new FileLogMessage()
                                         {
                                             Type = "handle",
                                             File = (string?)extractItem.val
-                                        });
+                                        }));
                                         break;
                                     case "discover":
                                         line += int.TryParse(extractItem.val?.ToString(), out var lineCount) ? lineCount : 0;
                                         fileCount += int.TryParse(extractItem.val?.ToString(), out var val) ? val : 0;
-                                        yield return ("extract_log", new LogMessage<string>()
+                                        pending.Add(("extract_log", new LogMessage<string>()
                                         {
                                             Type = "discover",
                                             Time = DateTime.Now.ToLongTimeString(),
                                             Log = $"发现 {extractItem.val} 行文本"
-                                        });
+                                        }));
                                         break;
                                     case "resource":
                                         if (extractItem.val is ObjWithText obj)
@@ -334,12 +368,26 @@ namespace AssetWorker.Service.Impl
                                         break;
                                 }
                             }
+                            success = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            // manager 解析不了该资源时跳过，继续处理下一个，
+                            // 避免单个损坏资源导致整轮提取中断
+                            pending.Add(("extract_log", new LogMessage<string>()
+                            {
+                                Type = "analyze",
+                                Time = DateTime.Now.ToLongTimeString(),
+                                Log = $"跳过无法解析的资源 {item.AssetName}: {ex.Message}"
+                            }));
                         }
                         finally
                         {
                             if (fileInst != null)
                                 AssetExtractor.SafeUnloadAssetsFile(manager, fileInst.path);
                         }
+                        foreach (var evt in pending)
+                            yield return evt;
                         scanned++;
                         double elapsed = stopwatch.Elapsed.TotalSeconds;
                         double speed = scanned / elapsed;
@@ -357,10 +405,11 @@ namespace AssetWorker.Service.Impl
                         };
                         yield return ("extract_filelog", new FileLogMessage()
                         {
-                            Type = "completed",
+                            Type = success ? "completed" : "failed",
                             File = item.AssetName
                         });
-                        assetMapper.UpdateAssetInfoStatus(inserter.Connection, inserter.Transaction, item.Id, 2, fileCount);
+                        if (success)
+                            assetMapper.UpdateAssetInfoStatus(inserter.Connection, inserter.Transaction, item.Id, 2, fileCount);
                         yield return ("extract_log", new LogMessage<Progress>()
                         {
                             Type = "progress",

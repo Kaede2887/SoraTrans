@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS "assets" (
 	"id"	INTEGER NOT NULL UNIQUE,
-	"name"	TEXT NOT NULL UNIQUE,
+	"name"	TEXT NOT NULL,
 	"size"	TEXT,
-	"path"	TEXT,
+	"path"	TEXT NOT NULL UNIQUE,
 	"status"	INTEGER DEFAULT 0,
 	"line_count"	INTEGER DEFAULT 0,
 	"parent_bundle_name"	TEXT,

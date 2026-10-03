@@ -3,7 +3,7 @@ import ProjectInfo from "@/model/ProjectInfo";
 import { VndbBody, VndbRes } from "@/model/Vndb";
 import { manager } from "@/utils/DbManager";
 import { useInitStore } from "@/utils/useInitStore";
-import { fetch } from '@tauri-apps/plugin-http';
+import { assetApi } from "@/utils/AssetApi";
 import { useEffect, useState } from "react";
 import { PiPlayFill } from "react-icons/pi";
 
@@ -16,8 +16,9 @@ export default function GamesView({ id, dbPath }: { id: number | null, dbPath: s
         let isInit = useInitStore.getState().isInit
         const getInfo = async (id: number) => {
             const info = await manager.selectProjectInfo(id)
-            console.log(`status: ${info?.status}`)
-            if (info?.status == 0) {
+            if (!info) return
+            console.log(`status: ${info.status}`)
+            if (info.status == 0) {
                 const vndb_body: VndbBody = {
                     filters: ["and", ["search", "=", info?.title], ["or", ["lang", "=", "zh"], ["lang", "=", "ja"]]],
                     fields: "title, image.url, description, rating, tags.id, tags.name, tags.category, tags.vn_count, tags.description, developers.name"
@@ -30,11 +31,7 @@ export default function GamesView({ id, dbPath }: { id: number | null, dbPath: s
                 const res: VndbRes = await response.json() as VndbRes;
                 await manager.completeProjctInfo(id, dbPath, res);
                 if (!isInit) {
-                    await fetch("http://localhost:5089/api/command/init", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ Path: info?.root_path, DbPath: dbPath })
-                    });
+                    await assetApi.init({ Path: info?.root_path, DbPath: dbPath, Title: info?.title });
                     useInitStore.getState().setIsInit(true)
                 }
 
@@ -45,11 +42,7 @@ export default function GamesView({ id, dbPath }: { id: number | null, dbPath: s
                 }
             } else {
                 if (!isInit) {
-                    await fetch("http://localhost:5089/api/command/init",{
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ Path: info?.root_path, DbPath: dbPath })
-                    });
+                    await assetApi.init({ Path: info?.root_path, DbPath: dbPath, Title: info?.title });
                     useInitStore.getState().setIsInit(true)
                 }
                 setGameInfo(info);

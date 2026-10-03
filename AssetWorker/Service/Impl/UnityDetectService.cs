@@ -8,14 +8,23 @@ namespace AssetWorker.Service.Impl
 {
     public class UnityDetectService
     {
-        public UnityEnvInfo DetectEnvInfo(string path)
+        public UnityEnvInfo DetectEnvInfo(string path, string? title)
         {
             var info = new UnityEnvInfo();
 
             if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
                 return info;
 
-            var dataDir = Directory.EnumerateDirectories(path, "*_Data").FirstOrDefault();
+            // 优先使用前端传入的 title 精确匹配 {Title}_Data 目录；
+            // 匹配失败再回退到原有 *_Data 枚举逻辑，兼容未传 title 的情况
+            string? dataDir = null;
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                var titleDataDir = Path.Combine(path, $"{title}_Data");
+                if (Directory.Exists(titleDataDir))
+                    dataDir = titleDataDir;
+            }
+            dataDir ??= Directory.EnumerateDirectories(path, "*_Data").FirstOrDefault();
 
             info.DataPath = dataDir;
 

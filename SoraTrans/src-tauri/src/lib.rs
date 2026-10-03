@@ -151,7 +151,9 @@ async fn rename_project_info(
 
 #[tauri::command]
 async fn init_game_info(manager: State<'_, db_manager::DbManager>, id: i64) -> Result<(), String> {
-    let _ = manager.open_game(id).await;
+    // 不吞错误：open_game 失败时必须把错误抛给前端，
+    // 否则前端以为初始化成功，但 game_db 实际未打开，后续查询全部报"尚未初始化"
+    manager.open_game(id).await?;
     Ok(())
 }
 
@@ -397,7 +399,7 @@ pub fn run() {
         .manage(manager)
         .manage(AssetWorkerProcess(Default::default()))
         .setup(move |app| {
-            spawn_asset_worker(app);
+            // spawn_asset_worker(app);
 
             let manager = manager_for_setup.clone();
 

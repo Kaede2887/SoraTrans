@@ -1,5 +1,4 @@
-import { info } from '@tauri-apps/plugin-log';
-import Database from '@tauri-apps/plugin-sql';
+import { error, info } from '@tauri-apps/plugin-log';
 import * as path from '@tauri-apps/api/path';
 import AssetInfo from '@/model/AssetInfo';
 import { FileTreeItem, useFileTreeStore } from '@/components/FileTree';
@@ -32,16 +31,16 @@ enum TextOriginSortMethod {
 
 class GameDbManager {
 
-    db: Database | null = null;
-
     async init(id: number): Promise<string> {
         try {
             await invoke("init_game_info",{id: id});
             const appPath = await path.appDataDir();
             const dbPath = await path.join(appPath, 'game', `game${id}.db`);
             return dbPath
-        } catch (error) {
-            info(`数据库初始化失败:${error}`)
+        } catch (e) {
+            // init_game_info 现在会把 open_game 的错误透传上来，
+            // 用 error 级别记录，避免被后续"Game 数据库尚未初始化"掩盖真正原因
+            error(`Game 数据库初始化失败:${e}`)
             return ""
         }
     }
