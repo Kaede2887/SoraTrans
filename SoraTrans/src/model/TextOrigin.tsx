@@ -4,6 +4,8 @@ import { create } from "zustand"
 export interface TextOrigin {
     id: number,
     origin_text: string,
+    // 再提取生成的占位符模板，未再提取时为 null
+    text_template?: string | null,
     trans_text: string
 }
 

@@ -6,3 +6,4 @@ pub mod tag_info;
 pub mod asset_object_info;
 pub mod pattern_tree_info;
 pub mod text_origin_info;
+pub mod text_template_info;

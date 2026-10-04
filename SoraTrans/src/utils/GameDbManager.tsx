@@ -259,6 +259,15 @@ class GameDbManager {
             return;
         }
     }
+
+    // 批量回写再提取生成的占位符模板到 text_origin.text_template
+    async updateTextTemplates(list: { id: number, text_template: string }[]) {
+        try {
+            await invoke("update_text_templates", { list })
+        } catch (e) {
+            error(`更新 text_template 失败:${e}`)
+        }
+    }
 }
 
 const gm: GameDbManager = new GameDbManager();

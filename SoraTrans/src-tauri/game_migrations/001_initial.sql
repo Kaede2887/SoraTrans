@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS "text_origin" (
 	"object_id"	INTEGER NOT NULL,
 	"pattern_id"	INTEGER NOT NULL,
 	"text"	TEXT NOT NULL,
+	"text_template" TEXT,
 	"field_path"	TEXT NOT NULL,
 	PRIMARY KEY("id" AUTOINCREMENT),
 	CONSTRAINT "object_id_foreign" FOREIGN KEY("object_id") REFERENCES "assets_object"("id"),

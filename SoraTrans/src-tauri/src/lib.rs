@@ -3,7 +3,7 @@ pub mod util;
 use pojo::{
     asset_info::AssetInfo, pattern_tree_info::PatternTreeInfo, project_info::ProjectInfo,
     scan_info::ScanInfo, scan_status::ScanStatus, tag_info::TagInfo,
-    text_origin_info::TextOriginInfo,
+    text_origin_info::TextOriginInfo, text_template_info::TextTemplateInfo,
 };
 use std::path::Path;
 use serde::{Serialize};
@@ -323,6 +323,14 @@ async fn insert_batch_trans(
     Ok(())
 }
 
+#[tauri::command]
+async fn update_text_templates(
+    manager: State<'_, db_manager::DbManager>,
+    list: Vec<TextTemplateInfo>,
+) -> Result<(), String> {
+    text_origin::update_text_templates(&manager, list).await
+}
+
 async fn close_all_db(manager: &db_manager::DbManager) -> Result<(), String> {
     manager.close().await;
     Ok(())
@@ -479,7 +487,8 @@ pub fn run() {
             search_text,
             search_text_with_pattern_id,
             insert_trans,
-            insert_batch_trans
+            insert_batch_trans,
+            update_text_templates
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

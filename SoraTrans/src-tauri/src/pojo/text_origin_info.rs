@@ -5,5 +5,6 @@ use sqlx::prelude::FromRow;
 pub struct TextOriginInfo{
     pub(crate) id: i64,
     origin_text: String,
+    pub(crate) text_template: Option<String>,
     pub(crate) trans_text: String
 }

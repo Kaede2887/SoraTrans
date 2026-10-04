@@ -1,5 +1,8 @@
 use crate::{
-    pojo::{pattern_tree_info::PatternTreeInfo, text_origin_info::TextOriginInfo},
+    pojo::{
+        pattern_tree_info::PatternTreeInfo, text_origin_info::TextOriginInfo,
+        text_template_info::TextTemplateInfo,
+    },
     util::db_manager::DbManager,
 };
 
@@ -43,7 +46,7 @@ pub async fn select_text_all(
 
     let sql = format!(
         r#"
-            SELECT tor.id,tor.text as origin_text,tt.text as trans_text FROM text_origin as tor
+            SELECT tor.id,tor.text as origin_text,tor.text_template,tt.text as trans_text FROM text_origin as tor
             LEFT JOIN text_translate as tt
             ON tt.origin_id = tor.id
             WHERE tor.object_id = ?
@@ -72,7 +75,7 @@ pub async fn select_text_by_pattern_id(
 
     let sql = format!(
         r#"
-            SELECT tor.id,tor.text as origin_text,tt.text as trans_text FROM text_origin as tor
+            SELECT tor.id,tor.text as origin_text,tor.text_template,tt.text as trans_text FROM text_origin as tor
             LEFT JOIN text_translate as tt
             ON tt.origin_id = tor.id
             WHERE tor.object_id = ?
@@ -103,7 +106,7 @@ pub async fn search_text(
 
     let sql = format!(
         r#"
-            SELECT tor.id,tor.text as origin_text,tt.text as trans_text FROM text_origin as tor
+            SELECT tor.id,tor.text as origin_text,tor.text_template,tt.text as trans_text FROM text_origin as tor
             LEFT JOIN text_translate as tt
             ON tt.origin_id = tor.id
             WHERE object_id = ?
@@ -137,14 +140,14 @@ pub async fn search_text_with_pattern_id(
 
     let sql = format!(
         r#"
-            SELECT tor.id,tor.text as origin_text,tt.text as trans_text FROM text_origin as tor
+            SELECT tor.id,tor.text as origin_text,tor.text_template,tt.text as trans_text FROM text_origin as tor
             LEFT JOIN text_translate as tt
             ON tt.origin_id = tor.id
             WHERE tor.object_id = ?
             AND tor.pattern_id = ?
             AND tor.text LIKE '%{}%'
             OR tt.text LIKE '%{}%'
-            {}     
+            {}
         "#,
         val,
         val,
@@ -159,4 +162,32 @@ pub async fn search_text_with_pattern_id(
         .map_err(|e| e.to_string())?;
 
     Ok(result)
+}
+
+/// 批量回写再提取生成的占位符模板到 text_origin.text_template
+pub async fn update_text_templates(
+    manager: &DbManager,
+    list: Vec<TextTemplateInfo>,
+) -> Result<(), String> {
+    let db = manager.game_db().await?;
+    let mut tx = db.begin().await.map_err(|e| e.to_string())?;
+
+    for item in list {
+        sqlx::query(
+            r#"
+                UPDATE text_origin
+                SET text_template = ?
+                WHERE id = ?;
+            "#,
+        )
+        .bind(&item.text_template)
+        .bind(item.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    Ok(())
 }
