@@ -1,6 +1,6 @@
 # SoraTrans
 
-SoraTrans 是一款基于 **Tauri、React、Rust 和 C#/.NET** 开发的 Unity 游戏本地化工具，提供 Unity 游戏资源扫描、文本提取、翻译导入、资源修改以及 Asset / Bundle 重新打包等功能。
+SoraTrans 是一款基于 **Tauri、React、Rust 和 C#/.NET** 开发的 Unity 游戏本地化工具，提供 Unity 游戏资源扫描、文本提取、翻译导入、资源修改以及 Asset / Bundle 重新打包等功能（暂时仅支持日文游戏）。
 
 ## Features
 
