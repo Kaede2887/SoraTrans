@@ -331,6 +331,14 @@ async fn update_text_templates(
     text_origin::update_text_templates(&manager, list).await
 }
 
+#[tauri::command]
+async fn select_text_templates(
+    manager: State<'_, db_manager::DbManager>,
+    ids: Vec<i64>,
+) -> Result<Vec<TextTemplateInfo>, String> {
+    text_origin::select_text_templates(&manager, ids).await
+}
+
 async fn close_all_db(manager: &db_manager::DbManager) -> Result<(), String> {
     manager.close().await;
     Ok(())
@@ -488,7 +496,8 @@ pub fn run() {
             search_text_with_pattern_id,
             insert_trans,
             insert_batch_trans,
-            update_text_templates
+            update_text_templates,
+            select_text_templates
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

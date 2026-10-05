@@ -1,7 +1,7 @@
 // 长文本"再提取"：按源语言选择正则，把【需要翻译的日文片段】挖出来替换为
 // {0}/{1} 占位符，数字、标点、// 注释、编号等结构原样保留在模板中。
-// 模板存进 text_origin.text_template；导出 JSON 时长文本条目直接输出
-// { "{0}": "日文片段", ... }，供翻译人员逐段翻译后回填。
+// 模板存进 text_origin.text_template；导出 JSON 时长文本拆成扁平条目
+// "id:{0}": "日文片段"，供翻译人员逐段翻译后回填。
 
 // 超过该长度（字符数）的 origin_text 才触发再提取
 export const LONG_TEXT_THRESHOLD = 100;
@@ -28,9 +28,6 @@ export interface TextTemplateExtractResult {
     // 占位符 -> 被挖出的日文片段，长文本条目导出时直接作为该条目的值
     placeholders: Record<string, string>;
 }
-
-// 导出 JSON 中长文本条目的值结构：{ "{0}": "日文片段", "{1}": "..." }
-export type TemplateExportValue = Record<string, string>;
 
 /**
  * 用指定语言的正则把原文中的待翻译片段替换为占位符。

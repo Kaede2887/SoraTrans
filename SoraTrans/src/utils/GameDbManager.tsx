@@ -268,6 +268,16 @@ class GameDbManager {
             error(`更新 text_template 失败:${e}`)
         }
     }
+
+    // 按 id 批量查询再提取模板，返回 id -> template；查询失败直接抛出，
+    // 让导入流程整体报错，避免缺模板时静默生成错误译文
+    async selectTextTemplates(ids: number[]): Promise<Map<number, string>> {
+        const res = await invoke<{ id: number, text_template: string }[]>(
+            "select_text_templates",
+            { ids }
+        );
+        return new Map(res.map(item => [item.id, item.text_template]));
+    }
 }
 
 const gm: GameDbManager = new GameDbManager();

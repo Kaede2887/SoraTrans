@@ -86,10 +86,10 @@ export function PatchDialog({ open, phase, errorMsg, dir, onOpenChange }: PatchD
                                     <div className="text-[8px] text-muted-foreground">补丁包已生成，可直接安装使用</div>
                                 </div>
                             </div>
-                            <div className="mt-4 rounded-lg bg-muted/50 p-2.5">
+                            <div className="mt-4 min-w-0 rounded-lg bg-muted/50 p-2.5">
                                 <div className="text-[10px] text-muted-foreground select-none">输出路径</div>
                                 <div className="mt-1 flex items-center gap-2">
-                                    <div className="flex-1 font-mono text-[8px] truncate leading-relaxed break-all text-foreground/80">
+                                    <div className="flex-1 min-w-0 truncate font-mono text-[8px] leading-relaxed text-foreground/80">
                                         {dir}
                                     </div>
                                     <Button
@@ -102,7 +102,7 @@ export function PatchDialog({ open, phase, errorMsg, dir, onOpenChange }: PatchD
                                     </Button>
                                 </div>
                             </div>
-                            <div className="mt-4 border-t pt-3">
+                            <div className="mt-4 min-w-0 border-t pt-3">
                                 <div className="flex gap-2">
                                     <Button variant="outline" size="sm" onClick={handleOpenFolder} className="flex-1 gap-1.5">
                                         <FolderOpen className="size-3.5" />
@@ -128,13 +128,13 @@ export function PatchDialog({ open, phase, errorMsg, dir, onOpenChange }: PatchD
                                     <div className="text-[10px] text-muted-foreground">制作过程中出现错误，请重试</div>
                                 </div>
                             </div>
-                            <div className="mt-4 max-h-24 overflow-y-auto rounded-lg bg-red-50 p-2.5">
+                            <div className="mt-4 min-w-0 max-h-24 overflow-y-auto rounded-lg bg-red-50 p-2.5">
                                 <div className="text-[10px] text-red-400 select-none">错误信息</div>
-                                <div className="mt-1.5 font-mono text-[11px] leading-relaxed break-all text-red-600">
+                                <div className="mt-1.5 min-w-0 break-all font-mono text-[11px] leading-relaxed text-red-600">
                                     {errorMsg}
                                 </div>
                             </div>
-                            <div className="mt-4 border-t pt-3">
+                            <div className="mt-4 min-w-0 border-t pt-3">
                                 <Button size="sm" onClick={() => onOpenChange(false)} className="w-full">
                                     确定
                                 </Button>

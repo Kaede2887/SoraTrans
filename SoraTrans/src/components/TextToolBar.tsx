@@ -8,7 +8,6 @@ import { invoke } from "@tauri-apps/api/core";
 import {
     extractTextTemplate,
     LONG_TEXT_THRESHOLD,
-    TemplateExportValue,
 } from "@/utils/TextTemplate";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -49,11 +48,11 @@ export default function TextToolBar() {
         const isSubTitle = initTitle != title
         const filePath = await save({
             title: "导出翻译文件",
-            defaultPath: isSubTitle ? `${initTitle}_${title}.json` : `${title}.json`,
+            defaultPath: isSubTitle ? `${initTitle}_${title}.csv` : `${title}.csv`,
             filters: [
                 {
-                    name: "JSON",
-                    extensions: ["json"],
+                    name: "CSV",
+                    extensions: ["csv"],
                 },
             ],
         });
@@ -72,11 +71,10 @@ export default function TextToolBar() {
         );
 
         try {
-            // 统一以 id 为键：
-            // 普通文本 -> "id": "原文"
-            // 超长文本 -> "id": { "{0}": "日文片段", ... }，同时把日文换成占位符的
-            // 模板回写到 text_origin.text_template，数字/标点/编号等结构保留在模板中
-            const data: Record<string, string | TemplateExportValue> = {};
+            // CSV 每行一个条目：键,文本，首行固定表头 Key,Value
+            // 普通文本键为 id；超长文本拆成 id:{0}、id:{1} ... 每行一个日文片段，
+            // 同时把日文换成占位符的模板回写到 text_origin.text_template
+            const lines: string[] = ["Key,Value"];
             const templateUpdates: { id: number, text_template: string }[] = [];
 
             for (const text of list) {
@@ -84,15 +82,17 @@ export default function TextToolBar() {
                     // 语言暂时写死日语，后续接用户选择
                     const { template, placeholders } = extractTextTemplate(text.origin_text, "ja");
                     if (Object.keys(placeholders).length > 0) {
-                        data[String(text.id)] = placeholders;
+                        for (const [token, content] of Object.entries(placeholders)) {
+                            lines.push(`${csvEscape(`${text.id}:${token}`)},${csvEscape(content)}`);
+                        }
                         templateUpdates.push({ id: text.id, text_template: template });
                         continue;
                     }
                 }
-                data[String(text.id)] = text.origin_text;
+                lines.push(`${text.id},${csvEscape(text.origin_text)}`);
             }
 
-            await writeTextFile(filePath, JSON.stringify(data, null, 2));
+            await writeTextFile(filePath, lines.join("\n"));
 
             if (templateUpdates.length > 0) {
                 await gm.updateTextTemplates(templateUpdates);
@@ -119,11 +119,11 @@ export default function TextToolBar() {
         const file = await open({
             multiple: false,
             directory: false,
-            title: "选择翻译 JSON 文件",
+            title: "选择翻译 CSV 文件",
             filters: [
                 {
-                    name: "JSON",
-                    extensions: ["json"],
+                    name: "CSV",
+                    extensions: ["csv"],
                 },
             ],
         });
@@ -133,32 +133,65 @@ export default function TextToolBar() {
         try {
             const list = useTextOriginStore.getState().list
             const text = await readTextFile(file);
-            const data: unknown = JSON.parse(text);
-            if (
-                typeof data !== "object" ||
-                data === null || Array.isArray(data)
-            ) {
-                throw new Error("JSON 格式错误");
+            const rows = parseCsvRows(text);
+
+            // 跳过首行表头 Key,Value
+            if (rows.length > 0 && rows[0][0] === "Key" && rows[0][1] === "Value") {
+                rows.shift();
             }
-            
-            const translationMap = new Map(Object.entries(data));
+
+            // CSV 键格式：普通文本 "id,译文"；长文本 "id:{0},译文片段"，
+            // 按 id 分组后用模板重组完整译文
+            const LONG_KEY_PATTERN = /^(\d+):(\{\d+\})$/;
+            const normalMap = new Map<number, string>();
+            const longParts = new Map<number, Record<string, string>>();
+
+            for (const [key, value] of rows) {
+                const match = LONG_KEY_PATTERN.exec(key);
+                if (match) {
+                    const id = Number(match[1]);
+                    const parts = longParts.get(id) ?? {};
+                    parts[match[2]] = value;
+                    longParts.set(id, parts);
+                } else if (/^\d+$/.test(key)) {
+                    normalMap.set(Number(key), value);
+                } else {
+                    throw new Error(`无法识别的键 "${key}"，应为 id 或 id:{占位符}`);
+                }
+            }
+            const templateMap = await gm.selectTextTemplates([...longParts.keys()]);
+
+            // 模板中的 {0}/{1} 占位符
+            const TOKEN_PATTERN = /\{\d+\}/g;
 
             const newList = list.map(item => {
-                const translated = translationMap.get(item.origin_text);
-
-                if (translated === undefined) { return item; }
-
-                if (typeof translated !== "string") {
-                    throw new Error(`"${item.origin_text}" 的翻译不是字符串`);
+                // 普通文本：译文直接入库
+                const normal = normalMap.get(item.id);
+                if (normal !== undefined) {
+                    return { ...item, trans_text: normal };
                 }
 
-                return {
-                    ...item,
-                    trans_text: translated,
-                };
+                // 长文本：按 id 查出模板，把占位符逐个替换为对应译文，重组完整译文
+                const parts = longParts.get(item.id);
+                if (parts === undefined) { return item; }
+
+                const template = templateMap.get(item.id);
+                if (template === undefined) {
+                    throw new Error(`id ${item.id} 缺少再提取模板，请重新导出后再导入`);
+                }
+                const transText = template.replace(TOKEN_PATTERN, (token) => {
+                    const translated = parts[token];
+                    if (translated === undefined) {
+                        throw new Error(`id ${item.id} 缺少占位符 ${token} 的译文`);
+                    }
+                    return translated;
+                });
+
+                return { ...item, trans_text: transText };
             });
+
             useTextOriginStore.getState().updateList(newList)
-            gm.insertBatchTrans(newList)
+            await gm.insertBatchTrans(newList)
         } catch (error) {
             console.log(`err: ${error}`)
         }
@@ -320,6 +353,52 @@ function ExportDialog({ open, phase, errorMsg, filePath, onOpenChange }: {
             </DialogContent>
         </Dialog>
     )
+}
+
+// CSV 字段转义：含逗号/引号/换行时用双引号包裹，内部引号双写
+function csvEscape(s: string): string {
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// 解析 CSV 为 [键, 值] 行，支持引号包裹的多行字段与 "" 转义引号
+function parseCsvRows(text: string): [string, string][] {
+    const rows: [string, string][] = [];
+    let field = "";
+    let row: string[] = [];
+    let inQuotes = false;
+    let i = text.startsWith("﻿") ? 1 : 0;
+
+    const pushField = () => { row.push(field); field = ""; };
+    const pushRow = () => {
+        if (row.length > 1 || row[0] !== "") {
+            if (row.length !== 2) throw new Error(`CSV 格式错误：每行应为 键,值 两列，实际 ${row.length} 列`);
+            rows.push([row[0], row[1]]);
+        }
+        row = [];
+    };
+
+    while (i < text.length) {
+        const c = text[i];
+        if (inQuotes) {
+            if (c === '"') {
+                if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+                inQuotes = false; i++; continue;
+            }
+            field += c; i++; continue;
+        }
+        if (c === '"') { inQuotes = true; i++; continue; }
+        if (c === ',') { pushField(); i++; continue; }
+        if (c === '\n' || c === '\r') {
+            pushField(); pushRow();
+            if (c === '\r' && text[i + 1] === '\n') i++;
+            i++; continue;
+        }
+        field += c; i++;
+    }
+    pushField(); pushRow();
+
+    if (inQuotes) throw new Error("CSV 格式错误：存在未闭合的引号");
+    return rows;
 }
 
 function ToolTitle({ title }: { title: string }) {

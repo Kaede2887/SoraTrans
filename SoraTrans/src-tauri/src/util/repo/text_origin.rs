@@ -164,6 +164,42 @@ pub async fn search_text_with_pattern_id(
     Ok(result)
 }
 
+/// 按 id 批量查询再提取模板，供导入长文本译文时回填占位符
+pub async fn select_text_templates(
+    manager: &DbManager,
+    ids: Vec<i64>,
+) -> Result<Vec<TextTemplateInfo>, String> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let db = manager.game_db().await?;
+    let mut conn = db.acquire().await.map_err(|e| e.to_string())?;
+
+    let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        r#"
+            SELECT id, text_template
+            FROM text_origin
+            WHERE id IN ({})
+            AND text_template IS NOT NULL;
+        "#,
+        placeholders
+    );
+
+    let mut query = sqlx::query_as::<_, TextTemplateInfo>(&sql);
+    for id in &ids {
+        query = query.bind(id);
+    }
+
+    let result = query
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(result)
+}
+
 /// 批量回写再提取生成的占位符模板到 text_origin.text_template
 pub async fn update_text_templates(
     manager: &DbManager,
