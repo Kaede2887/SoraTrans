@@ -6,10 +6,20 @@ import { useInitStore } from "@/utils/useInitStore";
 import { assetApi } from "@/utils/AssetApi";
 import { useEffect, useState } from "react";
 import { PiPlayFill } from "react-icons/pi";
+import { invoke } from "@tauri-apps/api/core";
 
 export default function GamesView({ id, dbPath }: { id: number | null, dbPath: string }) {
 
     const [gameInfo, setGameInfo] = useState<ProjectInfo | null>(null);
+
+    const handleLaunch = async () => {
+        if (!gameInfo?.file_path) return;
+        try {
+            await invoke("run_application", { filePath: gameInfo.file_path });
+        } catch (e) {
+            console.error("启动游戏失败:", e);
+        }
+    }
 
     useEffect(() => {
 
@@ -81,7 +91,11 @@ export default function GamesView({ id, dbPath }: { id: number | null, dbPath: s
 
                     </div>
                     <div className="shrink-0 shadow-lg">
-                        <button className="w-20 h-8 gap-1 flex items-center justify-center cursor-pointer text-semibold rounded-sm text-white text-xs bg-[#0067c0] hover:bg-[#0067c0]/70">
+                        <button
+                            onClick={handleLaunch}
+                            disabled={!gameInfo?.file_path}
+                            className="w-20 h-8 gap-1 flex items-center justify-center cursor-pointer text-semibold rounded-sm text-white text-xs bg-[#0067c0] hover:bg-[#0067c0]/70 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:hover:bg-gray-300"
+                        >
                             <PiPlayFill />
                             <span>启动</span>
                         </button>
