@@ -415,7 +415,7 @@ pub fn run() {
         .manage(manager)
         .manage(AssetWorkerProcess(Default::default()))
         .setup(move |app| {
-            spawn_asset_worker(app);
+            // spawn_asset_worker(app);
 
             let manager = manager_for_setup.clone();
 

@@ -18,6 +18,7 @@ namespace AssetWorker.Service.Impl
         private readonly AssetMapper assetMapper = new();
         private readonly AssetObjectMapper assetObjectMapper = new();
         private readonly TextOriginMapper textOriginMapper = new();
+        private readonly FontMapper fontMapper = new();
         private readonly UnityDetectService _unityDetectService;
         private readonly TaskControl _scanControl = new();
         private readonly TaskControl _extractControl = new();
@@ -268,6 +269,33 @@ namespace AssetWorker.Service.Impl
                                         if (extractItem.val is ObjWithText obj)
                                             inserter.Add(obj.obj, obj.list);
                                         break;
+                                    case "font":
+                                        if (extractItem.val is FontInfo font)
+                                        {
+                                            try
+                                            {
+                                                fontMapper.InsertFont(inserter.Connection, inserter.Transaction, font);
+                                                pending.Add(("extract_log", new LogMessage<string>()
+                                                {
+                                                    Type = "analyze",
+                                                    Time = DateTime.Now.ToLongTimeString(),
+                                                    Log = $"发现 {font.Kind} 字体 {font.Name}（{font.GlyphCount} 字形，图集 {font.AtlasWidth}x{font.AtlasHeight}）"
+                                                }));
+                                            }
+                                            catch (Exception fontEx)
+                                            {
+                                                // 字体入库失败（如 font 表尚未迁移）不能抛出 foreach：
+                                                // 否则 ExtractAsset 迭代器被 Dispose，该 assets 文件中
+                                                // 排在字体之后的全部文本对象都会丢失
+                                                pending.Add(("extract_log", new LogMessage<string>()
+                                                {
+                                                    Type = "analyze",
+                                                    Time = DateTime.Now.ToLongTimeString(),
+                                                    Log = $"字体记录入库失败 {font.Name}: {fontEx.Message}"
+                                                }));
+                                            }
+                                        }
+                                        break;
                                     default:
                                         break;
                                 }
@@ -363,6 +391,33 @@ namespace AssetWorker.Service.Impl
                                     case "resource":
                                         if (extractItem.val is ObjWithText obj)
                                             inserter.Add(obj.obj, obj.list);
+                                        break;
+                                    case "font":
+                                        if (extractItem.val is FontInfo font)
+                                        {
+                                            try
+                                            {
+                                                fontMapper.InsertFont(inserter.Connection, inserter.Transaction, font);
+                                                pending.Add(("extract_log", new LogMessage<string>()
+                                                {
+                                                    Type = "analyze",
+                                                    Time = DateTime.Now.ToLongTimeString(),
+                                                    Log = $"发现 {font.Kind} 字体 {font.Name}（{font.GlyphCount} 字形，图集 {font.AtlasWidth}x{font.AtlasHeight}）"
+                                                }));
+                                            }
+                                            catch (Exception fontEx)
+                                            {
+                                                // 字体入库失败（如 font 表尚未迁移）不能抛出 foreach：
+                                                // 否则 ExtractAsset 迭代器被 Dispose，该 assets 文件中
+                                                // 排在字体之后的全部文本对象都会丢失
+                                                pending.Add(("extract_log", new LogMessage<string>()
+                                                {
+                                                    Type = "analyze",
+                                                    Time = DateTime.Now.ToLongTimeString(),
+                                                    Log = $"字体记录入库失败 {font.Name}: {fontEx.Message}"
+                                                }));
+                                            }
+                                        }
                                         break;
                                     default:
                                         break;

@@ -47,7 +47,9 @@ namespace AssetWorker.Mapper
                 VALUES (@Name,@Type,@PathId,@AssetId,@Size,@LineCount)
             """;
             private const string LastIdSql = "SELECT last_insert_rowid();";
-            private const string ExistIdSql = "SELECT id FROM assets_object WHERE path_id = @PathId";
+            // PathId 只在单个 SerializedFile 内唯一，跨 assets 文件会重复，
+            // 必须带 asset_id 复合定位，否则跨文件同 PathId 会把文本挂到别的文件的对象上
+            private const string ExistIdSql = "SELECT id FROM assets_object WHERE path_id = @PathId AND asset_id = @AssetId";
             private const string InsertPatternSql = """
                 INSERT OR IGNORE INTO text_pattern (pattern, semantic)
                 VALUES (@Pattern, @Semantic)
@@ -72,8 +74,8 @@ namespace AssetWorker.Mapper
 
             public void Add(AssetObject obj, List<TextOrigin> texts)
             {
-                var affected = _conn.Execute(InsertObjSql, obj, _tx);
-                long objId = _conn.ExecuteScalar<long>(ExistIdSql, new { obj.PathId }, _tx);
+                _conn.Execute(InsertObjSql, obj, _tx);
+                long objId = _conn.ExecuteScalar<long>(ExistIdSql, new { obj.PathId, obj.AssetId }, _tx);
                 obj.Id = objId;
                 try
                 {
@@ -105,7 +107,9 @@ namespace AssetWorker.Mapper
                 string pattern = TextOrigin.ExtractPattern(fieldPath);
                 if (_patternCache.TryGetValue(pattern, out long cachedId))
                     return cachedId;
-                string semantic = Regex.Replace(pattern, @"\.Array\[\]", "");
+                // pattern 归一化后的数组段形如 ".Array[]"，末级保留了下标的形如 ".Array[1]"，
+                // 统一剥掉 ".Array" 让 semantic 可读：importGridList.rows.strings[1]
+                string semantic = Regex.Replace(pattern, @"\.Array(?=\[)", "");
                 _conn.Execute(InsertPatternSql, new { Pattern = pattern, Semantic = semantic }, _tx);
                 long id = _conn.ExecuteScalar<long>(SelectPatternIdSql, new { Pattern = pattern }, _tx);
                 _patternCache[pattern] = id;

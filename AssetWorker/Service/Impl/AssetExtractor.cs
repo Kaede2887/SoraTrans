@@ -137,47 +137,63 @@ namespace AssetWorker.Service.Impl
             manager.LoadClassDatabaseFromPackage(file.Metadata.UnityVersion);
             var MonoAssets = file.GetAssetsOfType(AssetClassID.MonoBehaviour);
             var TextAssets = file.GetAssetsOfType(AssetClassID.TextAsset);
+            var FontAssets = file.GetAssetsOfType(AssetClassID.Font);
             var count = 0;
             foreach (var goInfo in MonoAssets)
             {
                 List<TextOrigin> list = [];
-                // 声明在 try 外部并初始化为 null：catch 后 AssetObj 仍有确定值，避免 CS0165
+                // 声明在 try 外部并初始化为 null：catch 后仍有确定值，避免 CS0165
                 AssetObject? AssetObj = null;
+                FontInfo? fontObj = null;
                 try
                 {
                     var goBase = manager.GetBaseField(fileInst, goInfo);
 
-                    TraverseAndDetect(goBase, currentPath: "", onJapaneseFound: (keyPath, japaneseText) =>
+                    // TMP 字体（TMP_FontAsset，资源类型仍是 MonoBehaviour）单独识别入库：
+                    // 其 m_CreationSettings.characterSequence 含整包日文字符，继续当日文
+                    // 文本遍历会把字符集污染进 text_origin，因此识别为字体后跳过文本提取
+                    if (IsTmpFont(fileInst, goBase))
                     {
-                        count++;
-                        var textObj = new TextOrigin()
+                        fontObj = BuildFontInfo(goBase, goInfo.PathId, info.Id);
+                    }
+                    else
+                    {
+                        TraverseAndDetect(goBase, currentPath: "", onJapaneseFound: (keyPath, japaneseText) =>
                         {
-                            Text = japaneseText,
-                            FieldPath = keyPath
-                        };
-                        list.Add(textObj);
-                    });
+                            count++;
+                            var textObj = new TextOrigin()
+                            {
+                                Text = japaneseText,
+                                FieldPath = keyPath
+                            };
+                            list.Add(textObj);
+                        });
 
-                    // 先确认含有日文再解析脚本类名：GetMonoBehaviourName 内部的 GetExtAsset
-                    // 会触发外部依赖查找（可能加载依赖 assets 文件），对无日文对象应完全跳过
-                    if (list.Count > 0)
-                    {
-                        var name = GetMonoBehaviourName(fileInst, goBase);
-                        AssetObj = new AssetObject()
+                        // 先确认含有日文再解析脚本类名：GetMonoBehaviourName 内部的 GetExtAsset
+                        // 会触发外部依赖查找（可能加载依赖 assets 文件），对无日文对象应完全跳过
+                        if (list.Count > 0)
                         {
-                            Type = "MonoBehavior",
-                            Name = name,
-                            PathId = goInfo.PathId,
-                            AssetId = info.Id,
-                            Size = goInfo.ByteSize,
-                            LineCount = list.Count
-                        };
+                            var name = GetMonoBehaviourName(fileInst, goBase);
+                            AssetObj = new AssetObject()
+                            {
+                                Type = "MonoBehavior",
+                                Name = name,
+                                PathId = goInfo.PathId,
+                                AssetId = info.Id,
+                                Size = goInfo.ByteSize,
+                                LineCount = list.Count
+                            };
+                        }
                     }
                 }
                 catch
                 { }
 
-                if (AssetObj != null)
+                if (fontObj != null)
+                {
+                    yield return new ExtractAssetEvent("font", fontObj);
+                }
+                else if (AssetObj != null)
                 {
                     var ObjWithText = new ObjWithText(){
                         obj = AssetObj,
@@ -230,6 +246,22 @@ namespace AssetWorker.Service.Impl
                     };
                     yield return new ExtractAssetEvent("resource", ObjWithText);
                 }
+            }
+            // Unity 原生 Font（内置类型 AssetClassID.Font）：m_FontData 内嵌 TTF/OTF 字节，
+            // 与是否含日文无关，全部登记入库供后续补丁替换；单个解析失败不中断整轮提取
+            foreach (var fontInfo in FontAssets)
+            {
+                FontInfo? font = null;
+                try
+                {
+                    var fontBase = manager.GetBaseField(fileInst, fontInfo);
+                    font = BuildUnityFontInfo(fontBase, fontInfo.PathId, info.Id);
+                }
+                catch
+                { }
+                // C# 迭代器不允许在含 catch 的 try 内 yield，判空移到 try 外
+                if (font != null)
+                    yield return new ExtractAssetEvent("font", font);
             }
             yield return new ExtractAssetEvent("discover", count.ToString());
         }
@@ -322,6 +354,195 @@ namespace AssetWorker.Service.Impl
                 { }
             }
             return string.IsNullOrEmpty(name) ? "Unnamed asset" : name;
+        }
+
+        /// <summary>
+        /// 判断 MonoBehaviour 是否为 TMP_FontAsset。
+        /// 优先用序列化结构特征（只读本资产字段，不触发外部依赖加载）：
+        /// TMP_FontAsset 必有 m_FaceInfo、m_Version 和字形表
+        /// （1.5+ 为 m_GlyphTable，旧版为 m_glyphInfoList），普通脚本不会有这些字段。
+        /// 结构判定不出来时再按用户约定用资产名包含 SDF 兜底，并解析 MonoScript
+        /// 类名确认为 TMP_FontAsset，避免误伤同名普通脚本。
+        /// </summary>
+        private bool IsTmpFont(AssetsFileInstance fileInst, AssetTypeValueField goBase)
+        {
+            // 字段树整体可能是 dummy（找不到对应类的序列化布局），dummy 上的索引器虽返回 null
+            // 但这里仍显式排除，避免任何版本差异导致误判
+            if (goBase == null || goBase.IsDummy) return false;
+
+            if (!IsDummy(goBase["m_FaceInfo"])
+                && !IsDummy(goBase["m_Version"])
+                && (!IsDummy(goBase["m_GlyphTable"]) || !IsDummy(goBase["m_glyphInfoList"])))
+            {
+                return true;
+            }
+
+            var assetName = SafeString(goBase["m_Name"]);
+            if (!string.IsNullOrEmpty(assetName)
+                && assetName.Contains("SDF", StringComparison.OrdinalIgnoreCase))
+            {
+                return TryGetMonoScriptClassName(fileInst, goBase) == "TMP_FontAsset";
+            }
+            return false;
+        }
+
+        private static bool IsDummy(AssetTypeValueField? field) => field == null || field.IsDummy;
+
+        /// <summary>
+        /// 解析 MonoBehaviour 的 m_Script PPtr 指向的 MonoScript，读取其 m_ClassName。
+        /// 会触发外部依赖查找，仅在名字兜底路径使用；任何异常返回 null。
+        /// </summary>
+        private string? TryGetMonoScriptClassName(AssetsFileInstance fileInst, AssetTypeValueField goBase)
+        {
+            try
+            {
+                var scriptField = goBase["m_Script"];
+                if (scriptField == null) return null;
+                var ext = manager.GetExtAsset(fileInst, scriptField, false);
+                return SafeString(ext.baseField?["m_ClassName"]);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 从 TMP_FontAsset 字段树提取字体信息。全部字段逐个容错读取，
+        /// 不同 TMP 版本个别字段缺失时给默认值，不影响整轮提取。
+        /// </summary>
+        private FontInfo? BuildFontInfo(AssetTypeValueField goBase, long pathId, long assetId)
+        {
+            try
+            {
+                var face = goBase["m_FaceInfo"];
+                // 新版字形表 m_GlyphTable，旧版兼容 m_glyphInfoList
+                var glyphSizeField = Nav(goBase, "m_GlyphTable", "Array", "size")
+                    ?? Nav(goBase, "m_glyphInfoList", "Array", "size");
+
+                long? atlasTexturePathId = null;
+                var atlasArray = Nav(goBase, "m_AtlasTextures", "Array");
+                if (atlasArray is { Children.Count: > 0 })
+                {
+                    atlasTexturePathId = SafeNullableLong(Nav(atlasArray[0], "data", "m_PathID"));
+                }
+
+                return new FontInfo()
+                {
+                    Kind = "TMP",
+                    Name = SafeString(goBase["m_Name"]) is { Length: > 0 } n ? n : "Unnamed font",
+                    FamilyName = SafeString(face?["m_FamilyName"]),
+                    StyleName = SafeString(face?["m_StyleName"]),
+                    Version = SafeString(goBase["m_Version"]),
+                    PointSize = SafeDouble(face?["m_PointSize"]),
+                    AtlasWidth = SafeInt(goBase["m_AtlasWidth"]),
+                    AtlasHeight = SafeInt(goBase["m_AtlasHeight"]),
+                    AtlasPadding = SafeInt(goBase["m_AtlasPadding"]),
+                    AtlasRenderMode = SafeInt(goBase["m_AtlasRenderMode"]),
+                    PopulationMode = SafeInt(goBase["m_AtlasPopulationMode"]),
+                    GlyphCount = SafeInt(glyphSizeField),
+                    CharacterCount = SafeInt(Nav(goBase, "m_CharacterTable", "Array", "size")),
+                    PathId = pathId,
+                    AssetId = assetId,
+                    MaterialPathId = SafeNullableLong(goBase["m_Material"]?["m_PathID"]),
+                    AtlasTexturePathId = atlasTexturePathId
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // 字段树逐级取值，任一级缺失返回 null，避免链式判空样板代码
+        private static AssetTypeValueField? Nav(AssetTypeValueField? root, params string[] path)
+        {
+            var cur = root;
+            foreach (var p in path)
+            {
+                if (cur == null) return null;
+                cur = cur[p];
+            }
+            return cur;
+        }
+
+        /// <summary>
+        /// 从 Unity 原生 Font（AssetClassID.Font）字段树提取信息。
+        /// m_FontData 为内嵌 TTF/OTF 二进制（可能数 MB），只记录长度不存内容；
+        /// 长度 0 表示该字体引用系统字体（m_FontNames 名字回退）。
+        /// </summary>
+        private FontInfo? BuildUnityFontInfo(AssetTypeValueField fontBase, long pathId, long assetId)
+        {
+            try
+            {
+                if (fontBase == null || fontBase.IsDummy) return null;
+
+                var names = new List<string>();
+                var namesArray = Nav(fontBase, "m_FontNames", "Array");
+                if (namesArray is { Children.Count: > 0 })
+                {
+                    foreach (var n in namesArray.Children)
+                    {
+                        var s = SafeString(n);
+                        if (!string.IsNullOrEmpty(s)) names.Add(s);
+                    }
+                }
+
+                return new FontInfo()
+                {
+                    Kind = "UnityFont",
+                    Name = SafeString(fontBase["m_Name"]) is { Length: > 0 } fontName ? fontName : "Unnamed font",
+                    FamilyName = names.FirstOrDefault(),
+                    FontNames = names.Count > 0 ? string.Join(",", names) : null,
+                    PointSize = SafeDouble(fontBase["m_FontSize"]),
+                    FontDataSize = SafeByteArraySize(fontBase["m_FontData"]),
+                    PathId = pathId,
+                    AssetId = assetId,
+                    MaterialPathId = SafeNullableLong(fontBase["m_DefaultMaterial"]?["m_PathID"]),
+                    AtlasTexturePathId = SafeNullableLong(fontBase["m_Texture"]?["m_PathID"])
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // byte[] 在 AssetsTools 中可能反序列化为 ByteArray（直接取长度），
+        // 也可能是普通 Array（读 Array/size），两种都兼容
+        private static long SafeByteArraySize(AssetTypeValueField? field)
+        {
+            if (field == null) return 0;
+            try
+            {
+                if (field.Value != null && field.Value.ValueType == AssetValueType.ByteArray)
+                    return field.AsByteArray.Length;
+                var size = Nav(field, "Array", "size");
+                return size != null ? size.AsLong : 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        // AssetsTools 的 As* 访问器在类型不匹配时抛异常，字段树脏数据下需逐个容错
+        private static string? SafeString(AssetTypeValueField? field)
+        {
+            try { return field?.AsString; } catch { return null; }
+        }
+        private static int SafeInt(AssetTypeValueField? field, int def = 0)
+        {
+            try { return field?.AsInt ?? def; } catch { return def; }
+        }
+        private static long? SafeNullableLong(AssetTypeValueField? field)
+        {
+            if (field == null) return null;
+            try { return field.AsLong; } catch { return null; }
+        }
+        private static double SafeDouble(AssetTypeValueField? field)
+        {
+            try { return field?.AsFloat ?? 0; } catch { return 0; }
         }
 
         // Unload* 内部按路径匹配（Path.GetFullPath），入口名含非法路径字符（如 archive:/ 中的 ':'）时会抛异常，

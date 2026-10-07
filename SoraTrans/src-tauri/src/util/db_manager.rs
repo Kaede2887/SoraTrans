@@ -4,10 +4,8 @@ use std::{
     time::Duration,
 };
 
-use sqlx::{
-    sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions},
-};
-use tokio::sync::RwLock;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+use tokio::sync::{Mutex, RwLock};
 
 /// SQLite 数据库管理器
 /// 负责管理：
@@ -19,6 +17,11 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct DbManager {
     inner: Arc<RwLock<DbManagerInner>>,
+    /// 串行化游戏库的打开/关闭：
+    /// 前端并发触发两次 open_game 时，检查"当前已打开的游戏"都还没写入，
+    /// 两个调用会对同一个库文件同时跑 sqlx 迁移，
+    /// 第二个在写入 _sqlx_migrations.version 时撞 UNIQUE 约束直接报错
+    game_open_lock: Arc<Mutex<()>>,
 }
 
 struct DbManagerInner {
@@ -38,6 +41,7 @@ impl DbManager {
                 sora_db: None,
                 game_db: None,
             })),
+            game_open_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -168,6 +172,10 @@ impl DbManager {
     /// 打开一个 Game DB
     /// -> %APPDATA%/SoraTrans/game/game123.db
     pub async fn open_game(&self, game_id: i64) -> Result<(), String> {
+        // 先拿互斥锁再做"是否已打开"判断：
+        // 拿到锁后前一个并发调用的迁移与状态写入已完成，这里能直接看到结果
+        let _guard = self.game_open_lock.lock().await;
+
         let current_game_id = {
             let inner = self.inner.read().await;
             inner.game_db.as_ref().map(|(id, _)| *id)
@@ -187,7 +195,8 @@ impl DbManager {
 
         let pool = Self::create_pool(&path).await?;
 
-        // 不需要自己判断文件是否存在
+        // 003 迁移在 foreign_keys=ON 下通过 TEMP 表备份引用链完成表重建，
+        // 无需关闭外键检查，直接用池连接执行即可
         sqlx::migrate!("./game_migrations")
             .run(&pool)
             .await
@@ -230,6 +239,9 @@ impl DbManager {
 
     /// 关闭 Game DB
     pub async fn close_game(&self) -> Result<(), String> {
+        // 与 open_game 共用同一把锁，避免关闭与打开交错
+        let _guard = self.game_open_lock.lock().await;
+
         let pool = {
             let mut inner = self.inner.write().await;
             inner.game_db.take().map(|(_, pool)| pool)

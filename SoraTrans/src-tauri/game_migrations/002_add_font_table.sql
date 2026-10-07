@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS "font" (
+	"id"	INTEGER NOT NULL UNIQUE,
+	"name"	TEXT NOT NULL,
+	"family_name"	TEXT,
+	"style_name"	TEXT,
+	"version"	TEXT,
+	"point_size"	REAL,
+	"atlas_width"	INTEGER,
+	"atlas_height"	INTEGER,
+	"atlas_padding"	INTEGER,
+	"atlas_render_mode"	INTEGER,
+	"population_mode"	INTEGER,
+	"glyph_count"	INTEGER DEFAULT 0,
+	"character_count"	INTEGER DEFAULT 0,
+	"path_id"	INTEGER NOT NULL UNIQUE,
+	"asset_id"	INTEGER NOT NULL,
+	"material_path_id"	INTEGER,
+	"atlas_texture_path_id"	INTEGER,
+	"create_time"	TEXT NOT NULL DEFAULT (DATETIME('now', 'localtime')),
+	"update_time"	TEXT NOT NULL DEFAULT (DATETIME('now', 'localtime')),
+	PRIMARY KEY("id" AUTOINCREMENT),
+	CONSTRAINT "font_asset_id_foreign" FOREIGN KEY("asset_id") REFERENCES "assets"("id")
+);

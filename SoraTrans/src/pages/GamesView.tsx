@@ -22,7 +22,6 @@ export default function GamesView({ id, dbPath }: { id: number | null, dbPath: s
     }
 
     useEffect(() => {
-
         let isInit = useInitStore.getState().isInit
         const getInfo = async (id: number) => {
             const info = await manager.selectProjectInfo(id)
@@ -44,7 +43,6 @@ export default function GamesView({ id, dbPath }: { id: number | null, dbPath: s
                     await assetApi.init({ Path: info?.root_path, DbPath: dbPath, Title: info?.title });
                     useInitStore.getState().setIsInit(true)
                 }
-
                 const newInfo = await manager.selectProjectInfo(id)
                 setGameInfo(newInfo);
                 if (res.results[0].tags) {
