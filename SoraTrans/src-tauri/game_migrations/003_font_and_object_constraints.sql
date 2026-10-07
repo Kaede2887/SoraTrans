@@ -34,8 +34,8 @@ CREATE TABLE "font" (
 -- 2) assets_object 表：path_id 只在单个 SerializedFile 内唯一，跨 assets 文件会重复，
 --    全局 UNIQUE 会静默丢弃跨文件同 PathId 的对象。重建为复合唯一，id 原样保留。
 --    foreign_keys=ON（sqlx 默认）时，DROP 被引用的表会隐式删除其数据行，
---    text_origin 引用 assets_object、text_translate 引用 text_origin，
---    NO ACTION 外键会阻止删除；而 PRAGMA foreign_keys 在迁移事务内不可更改。
+--    text_origin(->assets_object)、text_translate(->text_origin) 的 NO ACTION
+--    外键会阻止删除；而 PRAGMA foreign_keys 在迁移事务内不可更改。
 --    因此先把引用链整链备份进 TEMP 表并清空，使 DROP assets_object 无子行引用，
 --    重建完成后按原 id 写回，外键按表名+id 解析自动重新指向新表。
 CREATE TEMP TABLE IF NOT EXISTS "_bk_text_origin" AS SELECT * FROM "text_origin";
