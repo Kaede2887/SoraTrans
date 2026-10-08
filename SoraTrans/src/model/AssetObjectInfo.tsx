@@ -19,6 +19,7 @@ interface AssetObjectState {
     currentSort: AssetObjSortMethod | null;
     selectAssetObj: AssetObjectInfo | null;
     modifiedIds: Set<number>;
+    typeFilter: Set<string>;
     setId: (val: number) => void;
     setAssetId: (val: number) => void;
     setAssetName: (val: string) => void;
@@ -26,6 +27,7 @@ interface AssetObjectState {
     setCurrentSort: (val: AssetObjSortMethod) => void;
     setSelectAssetObj: (val: AssetObjectInfo) => void;
     setModInfo: (val: number) => void;
+    setTypeFilter: (val: Set<string>) => void;
     sortListByMod: () => void;
 }
 
@@ -37,6 +39,7 @@ export const useAssetObjectStore = create<AssetObjectState>((set) => ({
     currentSort: null,
     selectAssetObj: null,
     modifiedIds: new Set<number>(),
+    typeFilter: new Set<string>(),
     setId: (val) => set({ id: val }),
     setAssetId: (val) => set({ assetId: val }),
     setAssetName: (val) => set({ assetName: val }),
@@ -49,6 +52,7 @@ export const useAssetObjectStore = create<AssetObjectState>((set) => ({
             ),
         })),
     setCurrentSort: (val) => set({ currentSort: val }),
+    setTypeFilter: (val) => set({ typeFilter: val }),
     setSelectAssetObj: (val) => set({ selectAssetObj: val }),
     setModInfo: (val) =>
         set((state) => {

@@ -217,12 +217,22 @@ async fn select_asset_list(
 }
 
 #[tauri::command]
+async fn select_distinct_types(
+    manager: State<'_, db_manager::DbManager>,
+    id: i64,
+) -> Result<Vec<String>, String> {
+    let list = assets_object::select_distinct_types(&manager, id).await?;
+    Ok(list)
+}
+
+#[tauri::command]
 async fn select_asset_object_list(
     manager: State<'_, db_manager::DbManager>,
     id: i64,
     sort: Option<String>,
+    types: Option<Vec<String>>,
 ) -> Result<Vec<AssetObjectInfo>, String> {
-    let list = assets_object::select_asset_object_list(&manager, id, sort).await?;
+    let list = assets_object::select_asset_object_list(&manager, id, sort, types).await?;
     Ok(list)
 }
 
@@ -263,8 +273,9 @@ async fn search_asset_obj_by_name(
     id: i64,
     val: String,
     sort: Option<String>,
+    types: Option<Vec<String>>,
 ) -> Result<Vec<AssetObjectInfo>, String> {
-    let list = assets_object::search_asset_obj_by_name(&manager, id, val, sort).await?;
+    let list = assets_object::search_asset_obj_by_name(&manager, id, val, sort, types).await?;
     Ok(list)
 }
 
@@ -487,6 +498,7 @@ pub fn run() {
             complete_project_info,
             insert_tags,
             select_asset_list,
+            select_distinct_types,
             select_asset_object_list,
             select_pattern_tree,
             select_text_all,

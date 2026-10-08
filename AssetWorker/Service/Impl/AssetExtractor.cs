@@ -135,28 +135,61 @@ namespace AssetWorker.Service.Impl
             yield return new ExtractAssetEvent("handle", info.AssetName ?? string.Empty);
             var file = fileInst.file;
             manager.LoadClassDatabaseFromPackage(file.Metadata.UnityVersion);
-            var MonoAssets = file.GetAssetsOfType(AssetClassID.MonoBehaviour);
-            var TextAssets = file.GetAssetsOfType(AssetClassID.TextAsset);
-            var FontAssets = file.GetAssetsOfType(AssetClassID.Font);
+            // 参照 UABEA：遍历文件内全部 AssetFileInfo，不再只挑 MonoBehaviour/TextAsset/Font，
+            // 让 assets_object 表完整反映资源结构，供前端按类型筛选/预览
+            var allAssets = file.AssetInfos;
             var count = 0;
-            foreach (var goInfo in MonoAssets)
+            foreach (var goInfo in allAssets)
             {
                 List<TextOrigin> list = [];
-                // 声明在 try 外部并初始化为 null：catch 后仍有确定值，避免 CS0165
                 AssetObject? AssetObj = null;
                 FontInfo? fontObj = null;
+                var typeId = goInfo.GetTypeId(file);
+                var typeName = GetTypeName(typeId);
                 try
                 {
                     var goBase = manager.GetBaseField(fileInst, goInfo);
 
-                    // TMP 字体（TMP_FontAsset，资源类型仍是 MonoBehaviour）单独识别入库：
-                    // 其 m_CreationSettings.characterSequence 含整包日文字符，继续当日文
-                    // 文本遍历会把字符集污染进 text_origin，因此识别为字体后跳过文本提取
-                    if (IsTmpFont(fileInst, goBase))
+                    if (typeId == (int)AssetClassID.MonoBehaviour)
                     {
-                        fontObj = BuildFontInfo(goBase, goInfo.PathId, info.Id);
+                        // TMP 字体（TMP_FontAsset，资源类型仍是 MonoBehaviour）单独识别入库：
+                        // 其 m_CreationSettings.characterSequence 含整包日文字符，继续当日文
+                        // 文本遍历会把字符集污染进 text_origin，因此识别为字体后跳过文本提取
+                        if (IsTmpFont(fileInst, goBase))
+                        {
+                            fontObj = BuildFontInfo(goBase, goInfo.PathId, info.Id);
+                        }
+                        else
+                        {
+                            TraverseAndDetect(goBase, currentPath: "", onJapaneseFound: (keyPath, japaneseText) =>
+                            {
+                                count++;
+                                var textObj = new TextOrigin()
+                                {
+                                    Text = japaneseText,
+                                    FieldPath = keyPath
+                                };
+                                list.Add(textObj);
+                            });
+
+                            // 先确认含有日文再解析脚本类名：GetMonoBehaviourName 内部的 GetExtAsset
+                            // 会触发外部依赖查找（可能加载依赖 assets 文件），对无日文对象应完全跳过
+                            var name = list.Count > 0
+                                ? GetMonoBehaviourName(fileInst, goBase)
+                                : (goBase["m_Name"]?.AsString ?? "Unnamed MonoBehaviour");
+                            if (string.IsNullOrEmpty(name)) name = "Unnamed MonoBehaviour";
+                            AssetObj = new AssetObject()
+                            {
+                                Type = "MonoBehaviour",
+                                Name = name,
+                                PathId = goInfo.PathId,
+                                AssetId = info.Id,
+                                Size = goInfo.ByteSize,
+                                LineCount = list.Count
+                            };
+                        }
                     }
-                    else
+                    else if (typeId == (int)AssetClassID.TextAsset)
                     {
                         TraverseAndDetect(goBase, currentPath: "", onJapaneseFound: (keyPath, japaneseText) =>
                         {
@@ -168,22 +201,36 @@ namespace AssetWorker.Service.Impl
                             };
                             list.Add(textObj);
                         });
-
-                        // 先确认含有日文再解析脚本类名：GetMonoBehaviourName 内部的 GetExtAsset
-                        // 会触发外部依赖查找（可能加载依赖 assets 文件），对无日文对象应完全跳过
-                        if (list.Count > 0)
+                        var name = goBase["m_Name"]?.AsString ?? "Unnamed TextAsset";
+                        if (string.IsNullOrEmpty(name)) name = "Unnamed TextAsset";
+                        AssetObj = new AssetObject()
                         {
-                            var name = GetMonoBehaviourName(fileInst, goBase);
-                            AssetObj = new AssetObject()
-                            {
-                                Type = "MonoBehavior",
-                                Name = name,
-                                PathId = goInfo.PathId,
-                                AssetId = info.Id,
-                                Size = goInfo.ByteSize,
-                                LineCount = list.Count
-                            };
-                        }
+                            Type = "TextAsset",
+                            Name = name,
+                            PathId = goInfo.PathId,
+                            AssetId = info.Id,
+                            Size = goInfo.ByteSize,
+                            LineCount = list.Count
+                        };
+                    }
+                    else if (typeId == (int)AssetClassID.Font)
+                    {
+                        fontObj = BuildUnityFontInfo(goBase, goInfo.PathId, info.Id);
+                    }
+                    else
+                    {
+                        // 其他类型：只登记元数据，不做文本遍历
+                        var name = goBase["m_Name"]?.AsString ?? typeName;
+                        if (string.IsNullOrEmpty(name)) name = typeName;
+                        AssetObj = new AssetObject()
+                        {
+                            Type = typeName,
+                            Name = name,
+                            PathId = goInfo.PathId,
+                            AssetId = info.Id,
+                            Size = goInfo.ByteSize,
+                            LineCount = 0
+                        };
                     }
                 }
                 catch
@@ -202,68 +249,40 @@ namespace AssetWorker.Service.Impl
                     yield return new ExtractAssetEvent("resource", ObjWithText);
                 }
             }
-
-            foreach (var goInfo in TextAssets)
-            {
-                List<TextOrigin> list = [];
-                // 声明在 try 外部并初始化为 null：catch 后 AssetObj 仍有确定值，避免 CS0165
-                AssetObject? AssetObj = null;
-                try
-                {
-                    var goBase = manager.GetBaseField(fileInst, goInfo);
-                    var name = goBase["m_Name"].AsString;
-                    if (name == "") { name = "Unnamed asset"; }
-
-                    // TraverseAndDetect 自身会遍历全部字段并识别日文字符串，
-                    // 无需对 m_Script 单独预判后再遍历（原两分支合起来等价于始终遍历一次）
-                    TraverseAndDetect(goBase, currentPath: "", onJapaneseFound: (keyPath, japaneseText) =>
-                    {
-                        count++;
-                        var textObj = new TextOrigin()
-                        {
-                            Text = japaneseText,
-                            FieldPath = keyPath
-                        };
-                        list.Add(textObj);
-                    });
-                    AssetObj = new AssetObject()
-                    {
-                        Type = "TextAsset",
-                        Name = name,
-                        PathId = goInfo.PathId,
-                        AssetId = info.Id,
-                        Size = goInfo.ByteSize,
-                        LineCount = list.Count
-                    };
-                }
-                catch { }
-                // 仅含有日文文本的对象才需要落库
-                if (AssetObj != null && list.Count > 0)
-                {
-                    var ObjWithText = new ObjWithText(){
-                        obj = AssetObj,
-                        list = list
-                    };
-                    yield return new ExtractAssetEvent("resource", ObjWithText);
-                }
-            }
-            // Unity 原生 Font（内置类型 AssetClassID.Font）：m_FontData 内嵌 TTF/OTF 字节，
-            // 与是否含日文无关，全部登记入库供后续补丁替换；单个解析失败不中断整轮提取
-            foreach (var fontInfo in FontAssets)
-            {
-                FontInfo? font = null;
-                try
-                {
-                    var fontBase = manager.GetBaseField(fileInst, fontInfo);
-                    font = BuildUnityFontInfo(fontBase, fontInfo.PathId, info.Id);
-                }
-                catch
-                { }
-                // C# 迭代器不允许在含 catch 的 try 内 yield，判空移到 try 外
-                if (font != null)
-                    yield return new ExtractAssetEvent("font", font);
-            }
             yield return new ExtractAssetEvent("discover", count.ToString());
+        }
+
+        /// <summary>
+        /// 将 Unity 的 TypeId 映射为可读类型名。参照 UABEA 的 AssetClassID 枚举，
+        /// 常见类型直接用枚举名，未知类型用 "Type_<id>" 兜底。
+        /// </summary>
+        private static string GetTypeName(int typeId)
+        {
+            return typeId switch
+            {
+                0 => "Object",
+                1 => "GameObject",
+                4 => "Transform",
+                20 => "Camera",
+                21 => "Material",
+                28 => "Texture2D",
+                43 => "Mesh",
+                48 => "Shader",
+                49 => "TextAsset",
+                83 => "AudioClip",
+                114 => "MonoBehaviour",
+                115 => "MonoScript",
+                128 => "Font",
+                142 => "AssetBundle",
+                150 => "PreloadData",
+                213 => "Sprite",
+                222 => "CanvasRenderer",
+                223 => "Canvas",
+                224 => "RectTransform",
+                225 => "CanvasGroup",
+                329 => "VideoClip",
+                _ => $"Type_{typeId}",
+            };
         }
         
         public record ExtractAssetEvent(string type, object val);

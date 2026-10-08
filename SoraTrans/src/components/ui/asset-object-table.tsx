@@ -1,12 +1,20 @@
 import AssetObjectInfo, { useAssetObjectStore } from "@/model/AssetObjectInfo";
 import { AssetObjSortMethod, gm } from "@/utils/GameDbManager";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { SearchIcon } from "lucide-react";
+import { ChevronDownIcon, FilterIcon, SearchIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MdArrowDownward, MdArrowUpward } from "react-icons/md";
 import SimpleBar from "simplebar-react";
 
-export default function AssetObjTable({ list, name, id }: { list: AssetObjectInfo[], name: string, id: number }) {
+interface AssetSelector {
+    assets: { id: number, name: string }[]
+    selectedId: number
+    onSelect: (e: React.ChangeEvent<HTMLSelectElement>) => void
+}
+
+export default function AssetObjTable({ list, name, id, assetSelector }: {
+    list: AssetObjectInfo[], name: string, id: number, assetSelector?: AssetSelector
+}) {
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -19,18 +27,52 @@ export default function AssetObjTable({ list, name, id }: { list: AssetObjectInf
 
     const [search, setSearch] = useState<string>("")
     const [isASC, setIsASC] = useState<boolean>()
+    const [showFilter, setShowFilter] = useState(false)
+    const [allTypes, setAllTypes] = useState<string[]>([])
+    const [typeFilterReady, setTypeFilterReady] = useState(false)
     const currentSort = useAssetObjectStore((state)=> state.currentSort)
     const setCurrentSort = useAssetObjectStore((state)=>state.setCurrentSort)
     const setSelectAssetObj = useAssetObjectStore((state)=>state.setSelectAssetObj)
+    const typeFilter = useAssetObjectStore((state)=>state.typeFilter)
+    const setTypeFilter = useAssetObjectStore((state)=>state.setTypeFilter)
+
+    // 独立查询全部类型，不随过滤变化——避免勾选一个类型后菜单选项跟着变
+    useEffect(() => {
+        setTypeFilterReady(false)
+        gm.selectDistinctTypes(id).then(types => {
+            setAllTypes(types)
+            // 默认全选
+            setTypeFilter(new Set(types))
+            setTypeFilterReady(true)
+        })
+    }, [id])
+
+    const handleTypeToggle = (type: string) => {
+        const next = new Set(typeFilter);
+        if (next.has(type)) next.delete(type);
+        else next.add(type);
+        setTypeFilter(next);
+    }
+
+    const handleSelectAll = () => {
+        setTypeFilter(new Set(allTypes));
+    }
+
+    const handleDeselectAll = () => {
+        setTypeFilter(new Set());
+    }
+
+    // 初始化前 undefined（不过滤，等全选默认值生效）；初始化后空数组 = 什么都不展示
+    const activeTypes = typeFilterReady ? (typeFilter.size > 0 ? Array.from(typeFilter) : []) : undefined;
 
     const handleSort = async (sort: AssetObjSortMethod) => {
         setIsASC(!isASC)
         setCurrentSort(sort)
 
         if (search != "") {
-            await gm.searchAssetObjByName(id, search, sort)
+            await gm.searchAssetObjByName(id, search, sort, activeTypes)
         } else {
-            await gm.selectAssetObjectList(id, sort)
+            await gm.selectAssetObjectList(id, sort, activeTypes)
         }
     }
 
@@ -41,33 +83,75 @@ export default function AssetObjTable({ list, name, id }: { list: AssetObjectInf
 
     useEffect(() => {
         async function handleSearch(val: string) {
-            await gm.searchAssetObjByName(id, val, currentSort)
+            await gm.searchAssetObjByName(id, val, currentSort, activeTypes)
         }
 
         if (search != "") {
             handleSearch(search)
         } else {
-            gm.selectAssetObjectList(id, currentSort)
+            gm.selectAssetObjectList(id, currentSort, activeTypes)
         }
-    }, [search])
+    }, [search, typeFilter])
 
     return (
         <div className="flex h-full min-w-0 flex-col ">
             <div className="bg-white px-2 h-[30px] relative flex items-center justify-between ">
                 {
                     name ? (
-                        <div className="grid items-center gap-1 text-gray-500 sm:grid-cols-2">
-                            <span className="text-[10px] truncate leading-none">{name}</span>
-                            <span className="text-[8px] truncate leading-none">共{list.length}项资源</span>
+                        <div className="flex items-center gap-2 text-gray-500 min-w-0">
+                            {assetSelector && (
+                                <div className="relative flex items-center">
+                                    <select
+                                        value={assetSelector.selectedId}
+                                        onChange={assetSelector.onSelect}
+                                        className="appearance-none bg-transparent text-[10px] text-neutral-600 font-medium outline-none cursor-pointer max-w-[200px] truncate pr-3"
+                                    >
+                                        <option value={0}>全部资源</option>
+                                        {assetSelector.assets.map(a => (
+                                            <option key={a.id} value={a.id}>{a.name}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDownIcon className="size-2 text-neutral-400 absolute right-0 pointer-events-none" />
+                                </div>
+                            )}
+                            <span className="text-[8px] truncate leading-none shrink-0">共{list.length}项</span>
                         </div>
                     ) : (
                         <div>
                         </div>
                     )
                 }
-                <div className="flex h-[20px] border rounded-sm items-center px-1">
-                    <SearchIcon className="size-2 text-neutral-400" />
-                    <input onChange={e => setSearch(e.target.value)} className="pl-1 h-[10px] text-[10px] text-neutral-400 grow outline-none" placeholder="筛选资源名称..." />
+                <div className="flex items-center gap-1">
+                    <div className="relative">
+                        <button onClick={() => setShowFilter(!showFilter)} className="flex h-[20px] w-[20px] border rounded-sm items-center justify-center text-[10px] text-neutral-500 hover:bg-muted/50">
+                            <FilterIcon className="size-2" />
+                        </button>
+                        {showFilter && (
+                            <>
+                                <div className="fixed inset-0 z-20" onClick={() => setShowFilter(false)} />
+                                <div className="absolute left-0 top-[22px] z-30 bg-white border rounded-md shadow-lg p-2 w-[160px]">
+                                    <div className="flex gap-1 mb-1 pb-1 border-b">
+                                        <button onClick={handleSelectAll} className="text-[9px] px-1.5 py-0.5 rounded bg-neutral-100 hover:bg-neutral-200 text-neutral-600">全选</button>
+                                        <button onClick={handleDeselectAll} className="text-[9px] px-1.5 py-0.5 rounded bg-neutral-100 hover:bg-neutral-200 text-neutral-600">取消全选</button>
+                                    </div>
+                                    <SimpleBar className="max-h-[160px]">
+                                        <div className="pr-1">
+                                            {allTypes.map(t => (
+                                                <label key={t} className="flex items-center gap-1.5 py-0.5 cursor-pointer hover:bg-muted/40 rounded px-1">
+                                                    <input type="checkbox" checked={typeFilter.has(t)} onChange={() => handleTypeToggle(t)} className="size-2.5" />
+                                                    <span className="text-[10px] text-neutral-600 truncate">{t}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </SimpleBar>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                    <div className="flex h-[20px] border rounded-sm items-center px-1">
+                        <SearchIcon className="size-2 text-neutral-400" />
+                        <input onChange={e => setSearch(e.target.value)} className="pl-1 h-[10px] text-[10px] text-neutral-400 grow outline-none" placeholder="筛选资源名称..." />
+                    </div>
                 </div>
             </div>
             <div className="bg-white z-10 px-2 text-[10px] text-neutral-400 border-b grid gap-2 grid-cols-[minmax(30px,1fr)_70px_40px_50px_40px_30px]">

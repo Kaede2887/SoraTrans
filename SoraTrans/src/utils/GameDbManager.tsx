@@ -96,12 +96,20 @@ class GameDbManager {
         }
     }
 
-    async selectAssetObjectList(id: number, sort?: AssetObjSortMethod | null): Promise<void> {
+    async selectDistinctTypes(id: number): Promise<string[]> {
+        try {
+            return await invoke<string[]>("select_distinct_types", { id: id })
+        } catch (error) {
+            return []
+        }
+    }
+
+    async selectAssetObjectList(id: number, sort?: AssetObjSortMethod | null, types?: string[]): Promise<void> {
         try {
             if (sort == AssetObjSortMethod.ModDown) {
                 useAssetObjectStore.getState().sortListByMod()
             } else {
-                const res = await invoke<AssetObjectInfo[]>("select_asset_object_list",{id:id,sort: sort})
+                const res = await invoke<AssetObjectInfo[]>("select_asset_object_list",{id:id,sort:sort,types})
                 useAssetObjectStore.getState().setAssetObjList(res);
             }
             
@@ -212,9 +220,9 @@ class GameDbManager {
         newNode.items = Array.from(childMap.values());
     }
 
-    async searchAssetObjByName(id: number, val: string, sort?: AssetObjSortMethod | null): Promise<void> {
+    async searchAssetObjByName(id: number, val: string, sort?: AssetObjSortMethod | null, types?: string[]): Promise<void> {
         try {
-            const res = await invoke<AssetObjectInfo[]>("search_asset_obj_by_name",{id:id,val:val,sort:sort})
+            const res = await invoke<AssetObjectInfo[]>("search_asset_obj_by_name",{id:id,val:val,sort:sort,types})
             
             useAssetObjectStore.getState().setAssetObjList(res);
         } catch (error) {

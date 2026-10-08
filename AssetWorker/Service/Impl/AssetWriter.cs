@@ -104,8 +104,42 @@ public class AssetWriter(AssetsManager assetsManager)
 
         bun.BlockAndDirInfo.DirectoryInfos[index].SetNewData(file);
 
-        using AssetsFileWriter writer = new(outPath);
-        bun.Write(writer);
+        // 重要：Pack 不应用 DirectoryInfo 的 Replacer（SetNewData 设置的修改会被忽略），
+        // 必须先用 Write 把修改落到一个未压缩中间文件，再重新加载并 Pack 压缩。
+        // 压缩类型按本机对 993MB 解压数据的实测取舍：
+        //   LZ4     -> 158.8s -> 104.4MB（原包 LZ4HC 持平，但纯托管实现近 3 分钟，像卡死）
+        //   LZ4Fast ->   6.5s -> 134.2MB（原包的 1.27 倍，补丁场景速度优先）
+        var tmpUncompressed = outPath + ".uncompressed.tmp";
+        try
+        {
+            using (var w = new AssetsFileWriter(tmpUncompressed))
+                bun.Write(w);
+
+            var tmpManager = new AssetsManager();
+            var tmpBun = tmpManager.LoadBundleFile(tmpUncompressed, false);
+            try
+            {
+                using AssetsFileWriter writer = new(outPath);
+                tmpBun.file.Pack(writer, AssetBundleCompressionType.LZ4Fast, false, new BundleCompressProgress());
+            }
+            finally
+            {
+                tmpManager.UnloadAll();
+            }
+        }
+        finally
+        {
+            if (File.Exists(tmpUncompressed))
+                File.Delete(tmpUncompressed);
+        }
+    }
+
+    /// <summary>
+    /// 无操作压缩进度回调。Pack 实现可能不判空直接调用回调，传入 null 有 NRE 风险。
+    /// </summary>
+    private class BundleCompressProgress : IAssetBundleCompressProgress
+    {
+        public void SetProgress(float progress) { }
     }
 
     public static AssetTypeValueField GetByPath(AssetTypeValueField root, string path)
