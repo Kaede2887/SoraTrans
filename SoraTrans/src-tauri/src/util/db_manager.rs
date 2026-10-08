@@ -4,7 +4,9 @@ use std::{
     time::Duration,
 };
 
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions},
+};
 use tokio::sync::{Mutex, RwLock};
 
 /// SQLite 数据库管理器
@@ -174,6 +176,8 @@ impl DbManager {
     pub async fn open_game(&self, game_id: i64) -> Result<(), String> {
         // 先拿互斥锁再做"是否已打开"判断：
         // 拿到锁后前一个并发调用的迁移与状态写入已完成，这里能直接看到结果
+        println!("正在打开游戏数据库{}", game_id);
+
         let _guard = self.game_open_lock.lock().await;
 
         let current_game_id = {
@@ -187,16 +191,18 @@ impl DbManager {
         }
 
         // 已经打开其他游戏
+        // 注意：不能调 close_game()，它也会请求 game_open_lock，
+        // tokio Mutex 不可重入，会死锁。走不加锁的内部实现。
         if current_game_id.is_some() {
-            self.close_game().await?;
+            println!("执行已经打开其他游戏");
+            self.close_game_inner().await?;
         }
 
         let path = Self::game_db_path(game_id)?;
 
         let pool = Self::create_pool(&path).await?;
 
-        // 003 迁移在 foreign_keys=ON 下通过 TEMP 表备份引用链完成表重建，
-        // 无需关闭外键检查，直接用池连接执行即可
+        // 不需要自己判断文件是否存在
         sqlx::migrate!("./game_migrations")
             .run(&pool)
             .await
@@ -241,7 +247,14 @@ impl DbManager {
     pub async fn close_game(&self) -> Result<(), String> {
         // 与 open_game 共用同一把锁，避免关闭与打开交错
         let _guard = self.game_open_lock.lock().await;
+        self.close_game_inner().await
+    }
 
+    /// 关闭 Game DB 的实际逻辑（不加锁）
+    /// 调用方必须已经持有 game_open_lock。
+    /// open_game 在已持锁的分支里直接调用本方法，
+    /// 不能再走 close_game()，否则 tokio Mutex 不可重入会死锁。
+    async fn close_game_inner(&self) -> Result<(), String> {
         let pool = {
             let mut inner = self.inner.write().await;
             inner.game_db.take().map(|(_, pool)| pool)
