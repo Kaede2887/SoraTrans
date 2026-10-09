@@ -107,12 +107,15 @@ class GameDbManager {
     async selectAssetObjectList(id: number, sort?: AssetObjSortMethod | null, types?: string[]): Promise<void> {
         try {
             if (sort == AssetObjSortMethod.ModDown) {
+                // ModDown 是前端本地排序，先查出数据再按修改状态排序
+                const res = await invoke<AssetObjectInfo[]>("select_asset_object_list",{id:id,sort:null,types})
+                useAssetObjectStore.getState().setAssetObjList(res);
                 useAssetObjectStore.getState().sortListByMod()
             } else {
                 const res = await invoke<AssetObjectInfo[]>("select_asset_object_list",{id:id,sort:sort,types})
                 useAssetObjectStore.getState().setAssetObjList(res);
             }
-            
+
         } catch (error) {
             return;
         }
@@ -222,9 +225,14 @@ class GameDbManager {
 
     async searchAssetObjByName(id: number, val: string, sort?: AssetObjSortMethod | null, types?: string[]): Promise<void> {
         try {
-            const res = await invoke<AssetObjectInfo[]>("search_asset_obj_by_name",{id:id,val:val,sort:sort,types})
-            
+            // ModDown 是前端本地排序，后端不识别，用 null 查询后再本地排序
+            const querySort = sort == AssetObjSortMethod.ModDown ? null : sort
+            const res = await invoke<AssetObjectInfo[]>("search_asset_obj_by_name",{id:id,val:val,sort:querySort,types})
+
             useAssetObjectStore.getState().setAssetObjList(res);
+            if (sort == AssetObjSortMethod.ModDown) {
+                useAssetObjectStore.getState().sortListByMod()
+            }
         } catch (error) {
             return;
         }

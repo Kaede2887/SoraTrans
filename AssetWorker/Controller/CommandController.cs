@@ -203,6 +203,84 @@ namespace AssetWorker.Controller
             }
         }
 
+        /// <summary>
+        /// GET /texture/{id} —— 解码 Texture2D 并直接返回 PNG，前端用 &lt;img&gt; 加载。
+        /// 业务错误（对象不存在/非 Texture2D/格式不支持）返回 400 + 纯文本原因。
+        /// </summary>
+        [HttpGet("texture/{id}")]
+        public async Task<IActionResult> TexturePreview([FromRoute] int id, CancellationToken cancellationToken)
+        {
+            Console.WriteLine($"接收到前端请求,正在处理纹理预览: {id}");
+            try
+            {
+                var preview = await _unityAssetsService.GetTexturePreviewAsync(id, cancellationToken);
+
+                Response.Headers["Access-Control-Allow-Origin"] = "*";
+                // 纹理可能很大（数 MB），且资源数据在编辑后会变化，不放长缓存
+                Response.Headers.CacheControl = "no-cache";
+                Response.Headers["X-Texture-Width"] = preview.Width.ToString();
+                Response.Headers["X-Texture-Height"] = preview.Height.ToString();
+                Response.Headers["X-Texture-Format"] = preview.TextureFormat.ToString();
+                return File(preview.Png, "image/png");
+            }
+            catch (OperationCanceledException)
+            {
+                return StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"纹理预览失败 id={id}: {ex.Message}");
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// POST /texture/import/{id} —— 接收用户上传的 PNG，按原 Texture2D 格式重新编码后
+        /// 存入 texture_patch 表（不写文件）。制作补丁时（make_patch）与文本修改一起打包。
+        /// multipart/form-data：
+        ///   - png: 上传的 PNG 文件
+        /// 返回 JSON：{ width, height, textureFormat }。
+        /// 业务错误（非 Texture2D / 格式不支持导入 / 存库失败）返回 400 + 纯文本原因。
+        /// </summary>
+        [HttpPost("texture/import/{id}")]
+        [RequestSizeLimit(200_000_000)] // 单张纹理 PNG 上限 200MB，覆盖大尺寸 RGBA32
+        public async Task<IActionResult> ImportTexture(
+            [FromRoute] int id,
+            IFormFile png,
+            CancellationToken cancellationToken)
+        {
+            Console.WriteLine($"接收到前端请求,正在处理纹理导入: {id}");
+            try
+            {
+                if (png == null || png.Length == 0)
+                {
+                    return BadRequest("未接收到 PNG 文件");
+                }
+
+                using var ms = new MemoryStream();
+                await png.CopyToAsync(ms, cancellationToken);
+                var result = await _unityAssetsService.ImportTextureAsync(
+                    id, ms.ToArray(), cancellationToken);
+
+                Response.Headers["Access-Control-Allow-Origin"] = "*";
+                return Ok(new
+                {
+                    width = result.Width,
+                    height = result.Height,
+                    textureFormat = result.TextureFormat
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                return StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"纹理导入失败 id={id}: {ex}");
+                return BadRequest(ex.Message);
+            }
+        }
+
         [HttpPost("make_patch")]
         public IActionResult MakePatch([FromForm] string dir)
         {

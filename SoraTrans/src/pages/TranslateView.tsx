@@ -14,7 +14,7 @@ export default function TranslateView() {
 
     return (
         <div className="w-full h-full flex gap-2 px-2 pb-2 overflow-hidden">
-            <div className="flex-1 bg-white rounded-sm h-full">
+            <div className="w-[75%] bg-white rounded-sm h-full">
                 <AssetObjectList />
             </div>
             <div className="w-[25%] bg-white rounded-sm h-full">

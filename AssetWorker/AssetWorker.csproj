@@ -26,6 +26,15 @@
     <Reference Include="AssetsTools.NET.MonoCecil">
       <HintPath>.\Denpendencies\AssetsTools.NET.MonoCecil.dll</HintPath>
     </Reference>
+    <!-- Texture2D 解码：解码器移植自 AssetStudio（AssetRipper.TextureDecoder），
+         StbImageWriteSharp 用于写出 PNG（3.0.2 的 nuspec 漏声明该依赖，需显式引用）。
+         Texture 包会传递依赖 NuGet 上的 AssetsTools.NET 3.0.0（2023 旧版，无法识别
+         新版 classdata.tpk 格式），这里排除其全部资产，强制使用上方本地 Denpendencies 中的 DLL -->
+    <PackageReference Include="AssetsTools.NET.Texture" Version="3.0.2" />
+    <PackageReference Include="AssetsTools.NET" Version="3.0.0" ExcludeAssets="all" />
+    <PackageReference Include="StbImageWriteSharp" Version="1.16.7" />
+    <!-- StbImageSharp 用于 EncodeTextureImage 读取 PNG（3.0.2 的 nuspec 漏声明该依赖，需显式引用） -->
+    <PackageReference Include="StbImageSharp" Version="2.27.13" />
     <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
   </ItemGroup>

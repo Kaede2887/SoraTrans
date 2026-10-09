@@ -150,68 +150,13 @@ namespace AssetWorker.Service.Impl
                 {
                     var goBase = manager.GetBaseField(fileInst, goInfo);
 
-                    if (typeId == (int)AssetClassID.MonoBehaviour)
+                    // 字体类单独识别入库，不做文本遍历：
+                    // TMP 字体（TMP_FontAsset，资源类型仍是 MonoBehaviour）的
+                    // m_CreationSettings.characterSequence 含整包日文字符，继续当日文
+                    // 文本遍历会把字符集污染进 text_origin
+                    if (typeId == (int)AssetClassID.MonoBehaviour && IsTmpFont(fileInst, goBase))
                     {
-                        // TMP 字体（TMP_FontAsset，资源类型仍是 MonoBehaviour）单独识别入库：
-                        // 其 m_CreationSettings.characterSequence 含整包日文字符，继续当日文
-                        // 文本遍历会把字符集污染进 text_origin，因此识别为字体后跳过文本提取
-                        if (IsTmpFont(fileInst, goBase))
-                        {
-                            fontObj = BuildFontInfo(goBase, goInfo.PathId, info.Id);
-                        }
-                        else
-                        {
-                            TraverseAndDetect(goBase, currentPath: "", onJapaneseFound: (keyPath, japaneseText) =>
-                            {
-                                count++;
-                                var textObj = new TextOrigin()
-                                {
-                                    Text = japaneseText,
-                                    FieldPath = keyPath
-                                };
-                                list.Add(textObj);
-                            });
-
-                            // 先确认含有日文再解析脚本类名：GetMonoBehaviourName 内部的 GetExtAsset
-                            // 会触发外部依赖查找（可能加载依赖 assets 文件），对无日文对象应完全跳过
-                            var name = list.Count > 0
-                                ? GetMonoBehaviourName(fileInst, goBase)
-                                : (goBase["m_Name"]?.AsString ?? "Unnamed MonoBehaviour");
-                            if (string.IsNullOrEmpty(name)) name = "Unnamed MonoBehaviour";
-                            AssetObj = new AssetObject()
-                            {
-                                Type = "MonoBehaviour",
-                                Name = name,
-                                PathId = goInfo.PathId,
-                                AssetId = info.Id,
-                                Size = goInfo.ByteSize,
-                                LineCount = list.Count
-                            };
-                        }
-                    }
-                    else if (typeId == (int)AssetClassID.TextAsset)
-                    {
-                        TraverseAndDetect(goBase, currentPath: "", onJapaneseFound: (keyPath, japaneseText) =>
-                        {
-                            count++;
-                            var textObj = new TextOrigin()
-                            {
-                                Text = japaneseText,
-                                FieldPath = keyPath
-                            };
-                            list.Add(textObj);
-                        });
-                        var name = goBase["m_Name"]?.AsString ?? "Unnamed TextAsset";
-                        if (string.IsNullOrEmpty(name)) name = "Unnamed TextAsset";
-                        AssetObj = new AssetObject()
-                        {
-                            Type = "TextAsset",
-                            Name = name,
-                            PathId = goInfo.PathId,
-                            AssetId = info.Id,
-                            Size = goInfo.ByteSize,
-                            LineCount = list.Count
-                        };
+                        fontObj = BuildFontInfo(goBase, goInfo.PathId, info.Id);
                     }
                     else if (typeId == (int)AssetClassID.Font)
                     {
@@ -219,8 +164,25 @@ namespace AssetWorker.Service.Impl
                     }
                     else
                     {
-                        // 其他类型：只登记元数据，不做文本遍历
-                        var name = goBase["m_Name"]?.AsString ?? typeName;
+                        // 所有可能有文本的类型统一遍历检测日文：MonoBehaviour/TextAsset/
+                        // GameObject/Material/ScriptableObject 等任意序列化类型都可能携带
+                        // 文本（对象名、描述字段等），无文本对象遍历后 list 为空
+                        TraverseAndDetect(goBase, currentPath: "", onJapaneseFound: (keyPath, japaneseText) =>
+                        {
+                            count++;
+                            list.Add(new TextOrigin()
+                            {
+                                Text = japaneseText,
+                                FieldPath = keyPath
+                            });
+                        });
+
+                        // MonoBehaviour 自身 m_Name 通常为空，需解析 MonoScript 类名；
+                        // 先确认含有日文再解析：GetMonoBehaviourName 内部的 GetExtAsset
+                        // 会触发外部依赖查找（可能加载依赖 assets 文件），对无日文对象应完全跳过
+                        var name = typeId == (int)AssetClassID.MonoBehaviour && list.Count > 0
+                            ? GetMonoBehaviourName(fileInst, goBase)
+                            : (goBase["m_Name"]?.AsString ?? "");
                         if (string.IsNullOrEmpty(name)) name = typeName;
                         AssetObj = new AssetObject()
                         {
@@ -229,7 +191,7 @@ namespace AssetWorker.Service.Impl
                             PathId = goInfo.PathId,
                             AssetId = info.Id,
                             Size = goInfo.ByteSize,
-                            LineCount = 0
+                            LineCount = list.Count
                         };
                     }
                 }

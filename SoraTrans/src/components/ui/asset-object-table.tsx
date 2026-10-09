@@ -28,6 +28,9 @@ export default function AssetObjTable({ list, name, id, assetSelector }: {
     const [search, setSearch] = useState<string>("")
     const [isASC, setIsASC] = useState<boolean>()
     const [showFilter, setShowFilter] = useState(false)
+    const [showAssetMenu, setShowAssetMenu] = useState(false)
+    // 列宽：名称 / 类型 / PathID / 大小 / 行数 / 修改
+    const [colWidths, setColWidths] = useState<number[]>([200, 70, 60, 50, 40, 30])
     const [allTypes, setAllTypes] = useState<string[]>([])
     const [typeFilterReady, setTypeFilterReady] = useState(false)
     const currentSort = useAssetObjectStore((state)=> state.currentSort)
@@ -81,6 +84,41 @@ export default function AssetObjTable({ list, name, id, assetSelector }: {
         useAssetObjectStore.getState().sortListByMod()
     }
 
+    // 拖拽调整列宽
+    const startResize = (idx: number, e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const startX = e.clientX
+        const startW = colWidths[idx]
+        const onMove = (ev: MouseEvent) => {
+            const delta = ev.clientX - startX
+            setColWidths(prev => {
+                const arr = [...prev]
+                arr[idx] = Math.max(24, startW + delta)
+                return arr
+            })
+        }
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove)
+            document.removeEventListener('mouseup', onUp)
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+        }
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+    }
+
+    const colTemplate = colWidths.map(w => `${w}px`).join(' ')
+
+    const ColResizer = ({ idx }: { idx: number }) => (
+        <div
+            onMouseDown={(e) => startResize(idx, e)}
+            className="absolute right-0 top-0 h-full w-[3px] cursor-col-resize hover:bg-blue-400/50 z-10"
+        />
+    )
+
     useEffect(() => {
         async function handleSearch(val: string) {
             await gm.searchAssetObjByName(id, val, currentSort, activeTypes)
@@ -100,18 +138,42 @@ export default function AssetObjTable({ list, name, id, assetSelector }: {
                     name ? (
                         <div className="flex items-center gap-2 text-gray-500 min-w-0">
                             {assetSelector && (
-                                <div className="relative flex items-center">
-                                    <select
-                                        value={assetSelector.selectedId}
-                                        onChange={assetSelector.onSelect}
-                                        className="appearance-none bg-transparent text-[10px] text-neutral-600 font-medium outline-none cursor-pointer max-w-[200px] truncate pr-3"
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowAssetMenu(v => !v)}
+                                        className="flex h-[20px] max-w-[200px] border rounded-sm items-center gap-1 px-1 text-[10px] text-neutral-600 font-medium hover:bg-muted/50 cursor-pointer"
                                     >
-                                        <option value={0}>全部资源</option>
-                                        {assetSelector.assets.map(a => (
-                                            <option key={a.id} value={a.id}>{a.name}</option>
-                                        ))}
-                                    </select>
-                                    <ChevronDownIcon className="size-2 text-neutral-400 absolute right-0 pointer-events-none" />
+                                        <span className="truncate">
+                                            {assetSelector.assets.find(a => a.id === assetSelector.selectedId)?.name ?? "全部资源"}
+                                        </span>
+                                        <ChevronDownIcon className="size-2 text-neutral-400 shrink-0" />
+                                    </button>
+                                    {showAssetMenu && (
+                                        <>
+                                            <div className="fixed inset-0 z-20" onClick={() => setShowAssetMenu(false)} />
+                                            <div className="absolute left-0 top-[22px] z-30 bg-white border rounded-md shadow-lg p-1 w-[200px]">
+                                                <SimpleBar className="max-h-[200px]">
+                                                    <div className="pr-1">
+                                                        <button
+                                                            onClick={() => { assetSelector.onSelect({ target: { value: "0" } } as React.ChangeEvent<HTMLSelectElement>); setShowAssetMenu(false) }}
+                                                            className={`flex w-full items-center gap-1.5 py-0.5 cursor-pointer hover:bg-muted/40 rounded px-1 ${assetSelector.selectedId === 0 ? "text-neutral-900 font-medium" : "text-neutral-600"}`}
+                                                        >
+                                                            <span className="text-[10px] truncate">全部资源</span>
+                                                        </button>
+                                                        {assetSelector.assets.map(a => (
+                                                            <button
+                                                                key={a.id}
+                                                                onClick={() => { assetSelector.onSelect({ target: { value: String(a.id) } } as React.ChangeEvent<HTMLSelectElement>); setShowAssetMenu(false) }}
+                                                                className={`flex w-full items-center gap-1.5 py-0.5 cursor-pointer hover:bg-muted/40 rounded px-1 ${assetSelector.selectedId === a.id ? "text-neutral-900 font-medium" : "text-neutral-600"}`}
+                                                            >
+                                                                <span className="text-[10px] truncate">{a.name}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </SimpleBar>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             )}
                             <span className="text-[8px] truncate leading-none shrink-0">共{list.length}项</span>
@@ -154,35 +216,41 @@ export default function AssetObjTable({ list, name, id, assetSelector }: {
                     </div>
                 </div>
             </div>
-            <div className="bg-white z-10 px-2 text-[10px] text-neutral-400 border-b grid gap-2 grid-cols-[minmax(30px,1fr)_70px_40px_50px_40px_30px]">
-                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.NameUp : AssetObjSortMethod.NameDown)} className="flex items-center cursor-pointer select-none">
-                    <span>名称</span>
-                    {currentSort == AssetObjSortMethod.NameUp && (<MdArrowUpward />)}
-                    {currentSort == AssetObjSortMethod.NameDown && (<MdArrowDownward />)}
+            <div className="bg-white z-10 px-2 text-[10px] text-neutral-400 border-b grid gap-2" style={{ gridTemplateColumns: colTemplate }}>
+                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.NameUp : AssetObjSortMethod.NameDown)} className="relative flex items-center cursor-pointer select-none overflow-hidden">
+                    <span className="truncate">名称</span>
+                    {currentSort == AssetObjSortMethod.NameUp && (<MdArrowUpward className="shrink-0" />)}
+                    {currentSort == AssetObjSortMethod.NameDown && (<MdArrowDownward className="shrink-0" />)}
+                    <ColResizer idx={0} />
                 </div>
-                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.TypeUp : AssetObjSortMethod.TypeDown)} className="flex items-center cursor-pointer select-none">
-                    <span>类型</span>
-                    {currentSort == AssetObjSortMethod.TypeUp && (<MdArrowUpward />)}
-                    {currentSort == AssetObjSortMethod.TypeDown && (<MdArrowDownward />)}
+                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.TypeUp : AssetObjSortMethod.TypeDown)} className="relative flex items-center cursor-pointer select-none overflow-hidden">
+                    <span className="truncate">类型</span>
+                    {currentSort == AssetObjSortMethod.TypeUp && (<MdArrowUpward className="shrink-0" />)}
+                    {currentSort == AssetObjSortMethod.TypeDown && (<MdArrowDownward className="shrink-0" />)}
+                    <ColResizer idx={1} />
                 </div>
-                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.PathIdUp : AssetObjSortMethod.PathIdDown)} className="flex items-center cursor-pointer select-none">
-                    <span>PathID</span>
-                    {currentSort == AssetObjSortMethod.PathIdUp && (<MdArrowUpward />)}
-                    {currentSort == AssetObjSortMethod.PathIdDown && (<MdArrowDownward />)}
+                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.PathIdUp : AssetObjSortMethod.PathIdDown)} className="relative flex items-center cursor-pointer select-none overflow-hidden">
+                    <span className="truncate">PathID</span>
+                    {currentSort == AssetObjSortMethod.PathIdUp && (<MdArrowUpward className="shrink-0" />)}
+                    {currentSort == AssetObjSortMethod.PathIdDown && (<MdArrowDownward className="shrink-0" />)}
+                    <ColResizer idx={2} />
                 </div>
-                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.SizeUp : AssetObjSortMethod.SizeDown)} className="flex items-center cursor-pointer select-none">
-                    <span>大小</span>
-                    {currentSort == AssetObjSortMethod.SizeUp && (<MdArrowUpward />)}
-                    {currentSort == AssetObjSortMethod.SizeDown && (<MdArrowDownward />)}
+                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.SizeUp : AssetObjSortMethod.SizeDown)} className="relative flex items-center cursor-pointer select-none overflow-hidden">
+                    <span className="truncate">大小</span>
+                    {currentSort == AssetObjSortMethod.SizeUp && (<MdArrowUpward className="shrink-0" />)}
+                    {currentSort == AssetObjSortMethod.SizeDown && (<MdArrowDownward className="shrink-0" />)}
+                    <ColResizer idx={3} />
                 </div>
-                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.LineUp : AssetObjSortMethod.LineDown)} className="flex items-center cursor-pointer select-none">
-                    <span>行数</span>
-                    {currentSort == AssetObjSortMethod.LineUp && (<MdArrowUpward />)}
-                    {currentSort == AssetObjSortMethod.LineDown && (<MdArrowDownward />)}
+                <div onClick={() => handleSort(isASC ? AssetObjSortMethod.LineUp : AssetObjSortMethod.LineDown)} className="relative flex items-center cursor-pointer select-none overflow-hidden">
+                    <span className="truncate">行数</span>
+                    {currentSort == AssetObjSortMethod.LineUp && (<MdArrowUpward className="shrink-0" />)}
+                    {currentSort == AssetObjSortMethod.LineDown && (<MdArrowDownward className="shrink-0" />)}
+                    <ColResizer idx={4} />
                 </div>
-                <div onClick={() => handleModSort(AssetObjSortMethod.ModDown)} className="flex items-center cursor-pointer select-none">
-                    <span>修改</span>
-                    {currentSort == AssetObjSortMethod.ModDown && (<MdArrowDownward />)}
+                <div onClick={() => handleModSort(AssetObjSortMethod.ModDown)} className="relative flex items-center cursor-pointer select-none overflow-hidden">
+                    <span className="truncate">修改</span>
+                    {currentSort == AssetObjSortMethod.ModDown && (<MdArrowDownward className="shrink-0" />)}
+                    <ColResizer idx={5} />
                 </div>
             </div>
             {
@@ -206,8 +274,8 @@ export default function AssetObjTable({ list, name, id, assetSelector }: {
                                         {virtualizer.getVirtualItems().map((vi) => {
                                             const row = list[vi.index];
                                             return (
-                                                <div key={vi.key} onClick={()=>setSelectAssetObj(row)} className="text-xs px-2 gap-2 border-b grid grid-cols-[minmax(30px,1fr)_70px_40px_50px_40px_30px] hover:bg-muted/50"
-                                                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: vi.size, alignItems: 'center', transform: `translateY(${vi.start}px)` }}>
+                                                <div key={vi.key} onClick={()=>setSelectAssetObj(row)} className="text-xs px-2 gap-2 border-b grid hover:bg-muted/50"
+                                                    style={{ gridTemplateColumns: colTemplate, position: 'absolute', top: 0, left: 0, width: '100%', height: vi.size, alignItems: 'center', transform: `translateY(${vi.start}px)` }}>
                                                     <div className="pr-2 truncate font-sans select-none">{row.name}</div>
                                                     <div className="bg-[#efefef] py-[2px] px-[4px] rounded-xs select-none text-[#6a6a6a] text-[9px] flex items-center justify-center">{row.type}</div>
                                                     <div className="font-mono select-none truncate">{row.path_id}</div>

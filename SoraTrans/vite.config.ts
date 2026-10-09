@@ -14,7 +14,8 @@ export default defineConfig(async () => ({
         launcher: "launcher.html",
         editor: "editor.html",
         viewtext: "viewtext.html",
-        viewdata: "viewdata.html"
+        viewdata: "viewdata.html",
+        texturepreview: "texturepreview.html"
       },
     },
   },
